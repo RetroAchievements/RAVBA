@@ -16,6 +16,10 @@
 #include "filters.h"
 #include "wxvbam.h"
 
+#ifdef RETROACHIEVEMENTS
+#include "retroachievements.h"
+#endif
+
 // release all buttons currently pressed
 static void clear_input_press();
 
@@ -201,6 +205,10 @@ void GameArea::LoadGame(const wxString& name)
         }
 
         emusys = &GBSystem;
+
+#ifdef RETROACHIEVEMENTS
+        RA_OnLoadNewRom(gbCgbMode ? GBC : GB, gbRom, rom_size, loaded_game.GetName().c_str());
+#endif
     } else /* if(t == IMAGE_GBA) */
     {
         if (!(rom_size = CPULoadRom(fn))) {
@@ -281,6 +289,10 @@ void GameArea::LoadGame(const wxString& name)
         basic_width = GBAWidth;
         basic_height = GBAHeight;
         emusys = &GBASystem;
+
+#ifdef RETROACHIEVEMENTS
+        RA_OnLoadNewRom(GBA, rom, rom_size, loaded_game.GetName().c_str());
+#endif
     }
 
     if (fullScreen)
@@ -420,13 +432,18 @@ void GameArea::SetFrameTitle()
 
     if (loaded != IMAGE_UNKNOWN) {
         tit.append(loaded_game.GetFullName());
+#ifndef RETROACHIEVEMENTS
         tit.append(wxT(" - "));
+#endif
     }
 
+#ifndef RETROACHIEVEMENTS
     tit.append(wxT("VisualBoyAdvance-M "));
 #ifndef FINAL_BUILD
     tit.append(_(VERSION));
 #endif
+#endif
+
 #ifndef NO_LINK
     int playerId = GetLinkPlayerId();
 
@@ -434,9 +451,13 @@ void GameArea::SetFrameTitle()
         tit.append(_(" player "));
         tit.append(wxChar(wxT('1') + playerId));
     }
-
 #endif
+
+#ifdef RETROACHIEVEMENTS
+    RA_UpdateAppTitle(tit.c_str());
+#else
     wxGetApp().frame->SetTitle(tit);
+#endif
 }
 
 void GameArea::recompute_dirs()
