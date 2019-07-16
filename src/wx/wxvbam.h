@@ -85,6 +85,7 @@ public:
     }
     virtual bool OnInit();
     virtual int OnRun();
+    virtual void CleanUp();
     virtual bool OnCmdLineHelp(wxCmdLineParser&);
     virtual bool OnCmdLineError(wxCmdLineParser&);
     virtual bool UsingWayland() { return using_wayland; }

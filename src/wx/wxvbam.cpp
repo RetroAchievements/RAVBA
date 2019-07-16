@@ -29,6 +29,10 @@
 #include "../common/ConfigManager.h"
 #include "builtin-over.h"
 
+#ifdef RETROACHIEVEMENTS
+#include "retroachievements.h"
+#endif
+
 IMPLEMENT_APP(wxvbamApp)
 IMPLEMENT_DYNAMIC_CLASS(MainFrame, wxFrame)
 
@@ -426,6 +430,10 @@ bool wxvbamApp::OnInit()
     if (isMaximized)
         frame->Maximize();
 
+#ifdef RETROACHIEVEMENTS
+    RA_Init(frame->GetHWND());
+#endif
+
     if (isFullscreen && wxGetApp().pending_load != wxEmptyString)
 	frame->ShowFullScreen(isFullscreen);
     frame->Show(true);
@@ -444,6 +452,15 @@ int wxvbamApp::OnRun()
     {
 	return wxApp::OnRun();
     }
+}
+
+void wxvbamApp::CleanUp()
+{
+#ifdef RETROACHIEVEMENTS
+    RA_Shutdown();
+#endif
+
+    wxApp::CleanUp();
 }
 
 bool wxvbamApp::OnCmdLineHelp(wxCmdLineParser& parser)
@@ -834,6 +851,17 @@ int MainFrame::FilterEvent(wxEvent& event)
                  return true;
 	     }
     }
+#ifdef RETROACHIEVEMENTS
+    else if (event.GetEventType() == wxEVT_COMMAND_MENU_SELECTED)
+    {
+        if (event.GetId() >= IDM_RA_MENUSTART &&
+            event.GetId() < IDM_RA_MENUEND)
+        {
+            RA_InvokeDialog(event.GetId());
+            return 0;
+        }
+    }
+#endif
     return -1;
 }
 
