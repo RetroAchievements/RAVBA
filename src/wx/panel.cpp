@@ -587,8 +587,17 @@ bool GameArea::LoadState(int slot)
 
 bool GameArea::LoadState(const wxFileName& fname)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("load a state"))
+        return false;
+#endif
+
     // FIXME: first save to backup state if not backup state
     bool ret = emusys->emuReadState(fname.GetFullPath().mb_fn_str());
+#ifdef RETROACHIEVEMENTS
+    if (ret)
+        RA_OnLoadState(fname.GetFullPath().c_str());
+#endif
 
     if (ret && num_rewind_states) {
         MainFrame* mf = wxGetApp().frame;
@@ -636,6 +645,10 @@ bool GameArea::SaveState(const wxFileName& fname)
 {
     // FIXME: first copy to backup state if not backup state
     bool ret = emusys->emuWriteState(fname.GetFullPath().mb_fn_str());
+#ifdef RETROACHIEVEMENTS
+    if (ret)
+        RA_OnSaveState(fname.GetFullPath().c_str());
+#endif
     wxGetApp().frame->update_state_ts(true);
     wxString msg;
     msg.Printf(ret ? _("Saved state %s") : _("Error saving state %s"),
