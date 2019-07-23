@@ -38,6 +38,10 @@ extern "C" {
     wxStaticCast(wxGetApp().frame->FindWindowByName(n), wxDialog)
 #endif
 
+#ifdef RETROACHIEVEMENTS
+#include "retroachievements.h"
+#endif
+
 void GDBBreak(MainFrame* mf);
 
 bool cmditem_lt(const struct cmditem& cmd1, const struct cmditem& cmd2)
@@ -1372,6 +1376,8 @@ EVT_HANDLER(Pause, "Pause (toggle)")
         panel->Pause();
     else if (!IsPaused())
         panel->Resume();
+
+    RA_SetPaused(paused);
 
     // undo next-frame's zeroing of frameskip
     int fs = frameSkip;

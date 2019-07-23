@@ -3,13 +3,47 @@
 #include "retroachievements.h"
 #include "RA_BuildVer.h"
 
+static void CausePause(bool pause)
+{
+    bool value;
+
+    MainFrame* mf = wxGetApp().frame;
+    mf->GetMenuOptionBool("Pause", value);
+    if (value != pause)
+    {
+        wxCommandEvent evh(wxEVT_COMMAND_MENU_SELECTED, XRCID("Pause"));
+        evh.SetEventObject(mf);
+        mf->GetEventHandler()->ProcessEvent(evh);
+    }
+}
 
 static void CauseUnpause()
 {
+    CausePause(false);
 }
 
 static void CausePause()
 {
+    CausePause(true);
+}
+
+void RA_ProcessInputs()
+{
+    if (RA_IsOverlayFullyVisible())
+    {
+        uint32_t nKeysDown = systemReadJoypad(-1);
+
+        ControllerInput input;
+        input.m_bDownPressed    = (nKeysDown & KEYM_DOWN) != 0;
+        input.m_bUpPressed      = (nKeysDown & KEYM_UP) != 0;
+        input.m_bLeftPressed    = (nKeysDown & KEYM_LEFT) != 0;
+        input.m_bRightPressed   = (nKeysDown & KEYM_RIGHT) != 0;
+        input.m_bConfirmPressed = (nKeysDown & KEYM_A) != 0;
+        input.m_bCancelPressed  = (nKeysDown & KEYM_B) != 0;
+        input.m_bQuitPressed    = (nKeysDown & KEYM_START) != 0;
+
+        RA_NavigateOverlay(&input);
+    }
 }
 
 static int GetMenuItemIndex(HMENU hMenu, const char* pItemName)

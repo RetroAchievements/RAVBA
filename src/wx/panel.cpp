@@ -998,6 +998,10 @@ void GameArea::OnIdle(wxIdleEvent& event)
         }
     }
 
+#ifdef RETROACHIEVEMENTS
+    RA_ProcessInputs();
+#endif
+
     if (!emusys)
         return;
 
@@ -1106,9 +1110,10 @@ void GameArea::OnIdle(wxIdleEvent& event)
 #endif
     } else {
         was_paused = true;
-
+#ifndef RETROACHIEVEMENTS
         if (paused)
             SetExtraStyle(GetExtraStyle() & ~wxWS_EX_PROCESS_IDLE);
+#endif
     }
 
     if (do_rewind && emusys->emuWriteMemState) {
