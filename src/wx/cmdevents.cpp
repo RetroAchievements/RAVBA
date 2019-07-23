@@ -1396,6 +1396,9 @@ EVT_HANDLER_MASK(Reset, "Reset", CMDEN_GB | CMDEN_GBA)
 {
     panel->emusys->emuReset();
     // systemScreenMessage("Reset");
+#ifdef RETROACHIEVEMENTS
+    RA_OnReset();
+#endif
 }
 
 EVT_HANDLER(ToggleFullscreen, "Full screen (toggle)")

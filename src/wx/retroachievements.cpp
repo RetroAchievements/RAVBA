@@ -90,6 +90,9 @@ static void GetEstimatedGameTitle(char* sNameOut)
 
 static void ResetEmulator()
 {
+    MainFrame* mf = wxGetApp().frame;
+    if (mf->GetPanel()->emusys->emuReset)
+        mf->GetPanel()->emusys->emuReset();
 }
 
 static void LoadROM(const char* sFullPath) {}
