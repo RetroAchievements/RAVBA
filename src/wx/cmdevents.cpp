@@ -1323,6 +1323,11 @@ EVT_HANDLER_MASK(RecordMovieStopRecording, "Stop game recording", CMDEN_GREC)
 
 EVT_HANDLER_MASK(PlayMovieStartPlaying, "Start playing movie...", CMDEN_NGREC | CMDEN_NGPLAY)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("play a movie"))
+        return;
+#endif
+
     mov_path = GetGamePath(gopts.recording_dir);
     systemStopGamePlayback();
     wxString def_name = panel->game_name() + wxT(".vmv");
@@ -1672,6 +1677,11 @@ EVT_HANDLER(CheatsAutoSaveLoad, "Auto save/load cheats (toggle)")
 // changed for convenience to match internal variable functionality
 EVT_HANDLER(CheatsEnable, "Enable cheats (toggle)")
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("enable cheats"))
+        return;
+#endif
+
     GetMenuOptionInt("CheatsEnable", cheatsEnabled, 1);
     update_opts();
 }

@@ -91,7 +91,7 @@ static void GetEstimatedGameTitle(char* sNameOut)
 static void ResetEmulator()
 {
     MainFrame* mf = wxGetApp().frame;
-    if (mf->GetPanel()->emusys->emuReset)
+    if (mf->GetPanel()->emusys && mf->GetPanel()->emusys->emuReset)
         mf->GetPanel()->emusys->emuReset();
 
     // ensure all video layers are enabled
@@ -102,6 +102,16 @@ static void ResetEmulator()
     // close debug windows
     while (!mf->popups.empty())
         mf->popups.front()->Close();
+
+    // stop movie playback
+    systemStopGamePlayback();
+
+    // disable cheats
+    if (cheatsEnabled)
+    {
+        cheatsEnabled = false;
+        mf->SetMenuOption("CheatsEnable", 0);
+    }
 }
 
 static void LoadROM(const char* sFullPath) {}
@@ -121,6 +131,14 @@ void RA_Init(HWND hWnd)
 
     // ensure titlebar text matches expected format
     RA_UpdateAppTitle("");
+
+    // disable cheats if hardcore mode is enabled
+    if (cheatsEnabled && RA_HardcoreModeIsActive())
+    {
+        cheatsEnabled = false;
+        MainFrame* mf = wxGetApp().frame;
+        mf->SetMenuOption("CheatsEnable", 0);
+    }
 }
 
 extern uint8_t gbReadMemory(uint16_t address);
