@@ -40,6 +40,7 @@ extern "C" {
 
 #ifdef RETROACHIEVEMENTS
 #include "retroachievements.h"
+#include "RA_BuildVer.h"
 #endif
 
 void GDBBreak(MainFrame* mf);
@@ -1397,7 +1398,9 @@ EVT_HANDLER(Pause, "Pause (toggle)")
     else if (!IsPaused())
         panel->Resume();
 
+#ifdef RETROACHIEVEMENTS
     RA_SetPaused(paused);
+#endif
 
     // undo next-frame's zeroing of frameskip
     int fs = frameSkip;
@@ -2653,6 +2656,14 @@ EVT_HANDLER(wxID_ABOUT, "About...")
                     "GNU General Public License for more details.\n\n"
                     "You should have received a copy of the GNU General Public License\n"
                     "along with this program.  If not, see http://www.gnu.org/licenses ."));
+
+#ifdef RETROACHIEVEMENTS
+    wxString description = ai.GetName() + " " + ai.GetVersion() + "\n" + ai.GetDescription();
+    ai.SetName(wxT("RAVisualBoyAdvance-M"));
+    ai.SetVersion(RAVBA_VERSION_SHORT);
+    ai.SetDescription(description);
+#endif
+
     // from gtk
     ai.AddDeveloper(wxT("Forgotten"));
     ai.AddDeveloper(wxT("kxu"));
