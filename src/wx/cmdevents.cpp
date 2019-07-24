@@ -854,6 +854,11 @@ static wxString batimp_path;
 
 EVT_HANDLER_MASK(ImportBatteryFile, "Import battery file...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("import a battery file"))
+        return;
+#endif
+
     if (!batimp_path.size())
         batimp_path = panel->bat_dir();
 
@@ -883,6 +888,11 @@ EVT_HANDLER_MASK(ImportBatteryFile, "Import battery file...", CMDEN_GB | CMDEN_G
 
 EVT_HANDLER_MASK(ImportGamesharkCodeFile, "Import GameShark code file...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("import GameShark codes"))
+        return;
+#endif
+
     static wxString path;
     wxFileDialog dlg(this, _("Select code file"), path, wxEmptyString,
         panel->game_type() == IMAGE_GBA ? _("Gameshark Code File (*.spc;*.xpc)|*.spc;*.xpc") : _("Gameshark Code File (*.gcf)|*.gcf"),
@@ -1004,6 +1014,11 @@ static wxString gss_path;
 EVT_HANDLER_MASK(ImportGamesharkActionReplaySnapshot,
     "Import GameShark Action Replay snapshot...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("import GameShark snapshots"))
+        return;
+#endif
+
     wxFileDialog dlg(this, _("Select snapshot file"), gss_path, wxEmptyString,
         panel->game_type() == IMAGE_GBA ? _("GS & PAC Snapshots (*.sps;*.xps)|*.sps;*.xps|GameShark SP Snapshots (*.gsv)|*.gsv") : _("Gameboy Snapshot (*.gbs)|*.gbs"),
         wxFD_OPEN | wxFD_FILE_MUST_EXIST);
@@ -1630,6 +1645,11 @@ EVT_HANDLER_MASK(IncrGameSlotSave, "Increase state slot number and save", CMDEN_
 
 EVT_HANDLER_MASK(Rewind, "Rewind", CMDEN_REWIND)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     MainFrame* mf = wxGetApp().frame;
     GameArea* panel = mf->GetPanel();
     int rew_st = (panel->next_rewind_state + NUM_REWINDS - 1) % NUM_REWINDS;
@@ -2134,7 +2154,14 @@ EVT_HANDLER(GeneralConfigure, "General options...")
     int rew = gopts.rewind_interval;
     wxDialog* dlg = GetXRCDialog("GeneralConfig");
 
-    if (ShowModal(dlg) == wxID_OK)
+    int result = ShowModal(dlg);
+
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive() && throttle < 100 && throttle != 0)
+        throttle = 100;
+#endif
+
+    if (result == wxID_OK)
         update_opts();
 
     if (panel->game_type() != IMAGE_UNKNOWN)

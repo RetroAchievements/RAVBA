@@ -112,6 +112,11 @@ static void ResetEmulator()
         cheatsEnabled = false;
         mf->SetMenuOption("CheatsEnable", 0);
     }
+
+    // reset frame rate
+    throttle = 100;
+    if (mf->GetPanel()->game_type() != IMAGE_UNKNOWN)
+        soundSetThrottle(throttle);
 }
 
 static void LoadROM(const char* sFullPath) {}
@@ -132,12 +137,20 @@ void RA_Init(HWND hWnd)
     // ensure titlebar text matches expected format
     RA_UpdateAppTitle("");
 
-    // disable cheats if hardcore mode is enabled
-    if (cheatsEnabled && RA_HardcoreModeIsActive())
+    // enfore hardcore behavior
+    if (RA_HardcoreModeIsActive())
     {
-        cheatsEnabled = false;
-        MainFrame* mf = wxGetApp().frame;
-        mf->SetMenuOption("CheatsEnable", 0);
+        // disable cheats
+        if (cheatsEnabled)
+        {
+            cheatsEnabled = false;
+            MainFrame* mf = wxGetApp().frame;
+            mf->SetMenuOption("CheatsEnable", 0);
+        }
+
+        // ensure throttle is not below 100%
+        if (throttle < 100)
+            throttle = 100;
     }
 }
 
