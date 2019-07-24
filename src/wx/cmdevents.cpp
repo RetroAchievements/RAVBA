@@ -1711,7 +1711,10 @@ EVT_HANDLER_MASK(VideoLayersBG0, "Video layer BG0 (toggle)", CMDEN_GB | CMDEN_GB
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG0", (1 << 8));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersBG0", layerSettings, (1 << 8));
@@ -1723,7 +1726,10 @@ EVT_HANDLER_MASK(VideoLayersBG1, "Video layer BG1 (toggle)", CMDEN_GB | CMDEN_GB
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG1", (1 << 9));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersBG1", layerSettings, (1 << 9));
@@ -1735,7 +1741,10 @@ EVT_HANDLER_MASK(VideoLayersBG2, "Video layer BG2 (toggle)", CMDEN_GB | CMDEN_GB
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG2", (1 << 10));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersBG2", layerSettings, (1 << 10));
@@ -1747,7 +1756,10 @@ EVT_HANDLER_MASK(VideoLayersBG3, "Video layer BG3 (toggle)", CMDEN_GB | CMDEN_GB
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG3", (1 << 11));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersBG3", layerSettings, (1 << 11));
@@ -1759,7 +1771,10 @@ EVT_HANDLER_MASK(VideoLayersOBJ, "Video layer OBJ (toggle)", CMDEN_GB | CMDEN_GB
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersOBJ", (1 << 12));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersOBJ", layerSettings, (1 << 12));
@@ -1771,7 +1786,10 @@ EVT_HANDLER_MASK(VideoLayersWIN0, "Video layer WIN0 (toggle)", CMDEN_GB | CMDEN_
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersWIN0", (1 << 13));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersWIN0", layerSettings, (1 << 13));
@@ -1783,7 +1801,10 @@ EVT_HANDLER_MASK(VideoLayersWIN1, "Video layer WIN1 (toggle)", CMDEN_GB | CMDEN_
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersWIN1", (1 << 14));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersWIN1", layerSettings, (1 << 14));
@@ -1795,7 +1816,10 @@ EVT_HANDLER_MASK(VideoLayersOBJWIN, "Video layer OBJWIN (toggle)", CMDEN_GB | CM
 {
 #ifdef RETROACHIEVEMENTS
     if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersOBJWIN", (1 << 15));
         return;
+    }
 #endif
 
     GetMenuOptionInt("VideoLayersOBJWIN", layerSettings, (1 << 15));
@@ -1933,7 +1957,7 @@ EVT_HANDLER_MASK(NextFrame, "Next Frame", CMDEN_GB | CMDEN_GBA)
 EVT_HANDLER_MASK(Disassemble, "Disassemble...", CMDEN_GB | CMDEN_GBA)
 {
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive())
+    if (!RA_WarnDisableHardcore("disassemble"))
         return;
 #endif
 
@@ -1942,6 +1966,11 @@ EVT_HANDLER_MASK(Disassemble, "Disassemble...", CMDEN_GB | CMDEN_GBA)
 
 EVT_HANDLER(Logging, "Logging...")
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view logs"))
+        return;
+#endif
+
     wxDialog* dlg = wxGetApp().frame->logdlg;
     dlg->SetWindowStyle(wxCAPTION | wxRESIZE_BORDER);
 
@@ -1957,7 +1986,7 @@ EVT_HANDLER(Logging, "Logging...")
 EVT_HANDLER_MASK(IOViewer, "I/O Viewer...", CMDEN_GBA)
 {
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive())
+    if (!RA_WarnDisableHardcore("view I/O"))
         return;
 #endif
 
@@ -1967,7 +1996,7 @@ EVT_HANDLER_MASK(IOViewer, "I/O Viewer...", CMDEN_GBA)
 EVT_HANDLER_MASK(MapViewer, "Map Viewer...", CMDEN_GB | CMDEN_GBA)
 {
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive())
+    if (!RA_WarnDisableHardcore("view maps"))
         return;
 #endif
 
@@ -1977,7 +2006,7 @@ EVT_HANDLER_MASK(MapViewer, "Map Viewer...", CMDEN_GB | CMDEN_GBA)
 EVT_HANDLER_MASK(MemoryViewer, "Memory Viewer...", CMDEN_GB | CMDEN_GBA)
 {
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive())
+    if (!RA_WarnDisableHardcore("view memory"))
         return;
 #endif
 
@@ -1987,7 +2016,7 @@ EVT_HANDLER_MASK(MemoryViewer, "Memory Viewer...", CMDEN_GB | CMDEN_GBA)
 EVT_HANDLER_MASK(OAMViewer, "OAM Viewer...", CMDEN_GB | CMDEN_GBA)
 {
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive())
+    if (!RA_WarnDisableHardcore("view OAM"))
         return;
 #endif
 
@@ -1997,7 +2026,7 @@ EVT_HANDLER_MASK(OAMViewer, "OAM Viewer...", CMDEN_GB | CMDEN_GBA)
 EVT_HANDLER_MASK(PaletteViewer, "Palette Viewer...", CMDEN_GB | CMDEN_GBA)
 {
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive())
+    if (!RA_WarnDisableHardcore("view palettes"))
         return;
 #endif
 
@@ -2007,7 +2036,7 @@ EVT_HANDLER_MASK(PaletteViewer, "Palette Viewer...", CMDEN_GB | CMDEN_GBA)
 EVT_HANDLER_MASK(TileViewer, "Tile Viewer...", CMDEN_GB | CMDEN_GBA)
 {
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive())
+    if (!RA_WarnDisableHardcore("view tiles"))
         return;
 #endif
 
