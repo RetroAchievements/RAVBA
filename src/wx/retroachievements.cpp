@@ -29,7 +29,7 @@ static void CausePause()
 
 void RA_ProcessInputs()
 {
-    if (RA_IsOverlayFullyVisible())
+    if (RA_IsOverlayFullyVisible() && wxGetApp().frame->IsActive())
     {
         uint32_t nKeysDown = systemReadJoypad(-1);
 
