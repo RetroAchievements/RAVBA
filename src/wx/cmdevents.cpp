@@ -1902,6 +1902,11 @@ EVT_HANDLER_MASK(NextFrame, "Next Frame", CMDEN_GB | CMDEN_GBA)
 
 EVT_HANDLER_MASK(Disassemble, "Disassemble...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     Disassemble();
 }
 
@@ -1921,31 +1926,61 @@ EVT_HANDLER(Logging, "Logging...")
 
 EVT_HANDLER_MASK(IOViewer, "I/O Viewer...", CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     IOViewer();
 }
 
 EVT_HANDLER_MASK(MapViewer, "Map Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     MapViewer();
 }
 
 EVT_HANDLER_MASK(MemoryViewer, "Memory Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     MemViewer();
 }
 
 EVT_HANDLER_MASK(OAMViewer, "OAM Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     OAMViewer();
 }
 
 EVT_HANDLER_MASK(PaletteViewer, "Palette Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     PaletteViewer();
 }
 
 EVT_HANDLER_MASK(TileViewer, "Tile Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     TileViewer();
 }
 

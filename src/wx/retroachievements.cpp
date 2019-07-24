@@ -98,6 +98,10 @@ static void ResetEmulator()
     wxCommandEvent evh(wxEVT_COMMAND_MENU_SELECTED, XRCID("VideoLayersReset"));
     evh.SetEventObject(mf);
     mf->GetEventHandler()->ProcessEvent(evh);
+
+    // close debug windows
+    while (!mf->popups.empty())
+        mf->popups.front()->Close();
 }
 
 static void LoadROM(const char* sFullPath) {}
