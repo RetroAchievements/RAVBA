@@ -720,6 +720,8 @@ EVT_CONTEXT_MENU(MainFrame::OnMenu)
 EVT_ACTIVATE(MainFrame::OnActivate)
 // requires DragAcceptFiles(true); even then may not do anything
 EVT_DROP_FILES(MainFrame::OnDropFile)
+// possibly prevent close
+EVT_CLOSE(MainFrame::OnClose)
 
 // for window geometry
 EVT_MOVE(MainFrame::OnMove)
@@ -863,6 +865,19 @@ int MainFrame::FilterEvent(wxEvent& event)
     }
 #endif
     return -1;
+}
+
+void MainFrame::OnClose(wxCloseEvent& event)
+{
+#ifdef RETROACHIEVEMENTS
+    if (event.CanVeto() && !RA_ConfirmLoadNewRom(true))
+    {
+        event.Veto();
+        return;
+    }
+#endif
+
+    event.Skip(); // let default handler destroy the window
 }
 
 wxString MainFrame::GetGamePath(wxString path)

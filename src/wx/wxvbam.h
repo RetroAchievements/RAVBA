@@ -372,6 +372,8 @@ private:
     void OnDropFile(wxDropFilesEvent&);
     // pop up menu in fullscreen mode
     void OnMenu(wxContextMenuEvent&);
+    // close warning
+    void OnClose(wxCloseEvent&);
     // window geometry
     void OnMove(wxMoveEvent& event);
     void OnSize(wxSizeEvent& event);

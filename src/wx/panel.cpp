@@ -54,6 +54,11 @@ GameArea::GameArea()
 
 void GameArea::LoadGame(const wxString& name)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_ConfirmLoadNewRom(false))
+        return;
+#endif
+
     rom_scene_rls = wxT("-");
     rom_scene_rls_name = wxT("-");
     rom_name = wxT("");
@@ -492,6 +497,11 @@ void GameArea::UnloadGame(bool destruct)
     if (!emulating)
         return;
 
+#ifdef RETROACHIEVEMENTS
+    if (!RA_ConfirmLoadNewRom(false))
+        return;
+#endif
+
     // last opportunity to autosave cheats
     if (gopts.autoload_cheats && cheats_dirty) {
         wxFileName cfn = loaded_game;
@@ -566,6 +576,10 @@ void GameArea::UnloadGame(bool destruct)
 
     if (rewind_mem)
         num_rewind_states = 0;
+
+#ifdef RETROACHIEVEMENTS
+    RA_ActivateGame(0);
+#endif
 }
 
 bool GameArea::LoadState()
