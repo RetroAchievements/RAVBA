@@ -93,6 +93,11 @@ static void ResetEmulator()
     MainFrame* mf = wxGetApp().frame;
     if (mf->GetPanel()->emusys->emuReset)
         mf->GetPanel()->emusys->emuReset();
+
+    // ensure all video layers are enabled
+    wxCommandEvent evh(wxEVT_COMMAND_MENU_SELECTED, XRCID("VideoLayersReset"));
+    evh.SetEventObject(mf);
+    mf->GetEventHandler()->ProcessEvent(evh);
 }
 
 static void LoadROM(const char* sFullPath) {}

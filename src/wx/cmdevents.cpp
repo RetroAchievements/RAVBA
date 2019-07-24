@@ -1679,6 +1679,11 @@ EVT_HANDLER(CheatsEnable, "Enable cheats (toggle)")
 // Debug menu
 EVT_HANDLER_MASK(VideoLayersBG0, "Video layer BG0 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersBG0", layerSettings, (1 << 8));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1686,6 +1691,11 @@ EVT_HANDLER_MASK(VideoLayersBG0, "Video layer BG0 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersBG1, "Video layer BG1 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersBG1", layerSettings, (1 << 9));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1693,6 +1703,11 @@ EVT_HANDLER_MASK(VideoLayersBG1, "Video layer BG1 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersBG2, "Video layer BG2 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersBG2", layerSettings, (1 << 10));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1700,6 +1715,11 @@ EVT_HANDLER_MASK(VideoLayersBG2, "Video layer BG2 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersBG3, "Video layer BG3 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersBG3", layerSettings, (1 << 11));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1707,6 +1727,11 @@ EVT_HANDLER_MASK(VideoLayersBG3, "Video layer BG3 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersOBJ, "Video layer OBJ (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersOBJ", layerSettings, (1 << 12));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1714,6 +1739,11 @@ EVT_HANDLER_MASK(VideoLayersOBJ, "Video layer OBJ (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersWIN0, "Video layer WIN0 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersWIN0", layerSettings, (1 << 13));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1721,6 +1751,11 @@ EVT_HANDLER_MASK(VideoLayersWIN0, "Video layer WIN0 (toggle)", CMDEN_GB | CMDEN_
 
 EVT_HANDLER_MASK(VideoLayersWIN1, "Video layer WIN1 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersWIN1", layerSettings, (1 << 14));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1728,6 +1763,11 @@ EVT_HANDLER_MASK(VideoLayersWIN1, "Video layer WIN1 (toggle)", CMDEN_GB | CMDEN_
 
 EVT_HANDLER_MASK(VideoLayersOBJWIN, "Video layer OBJWIN (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     GetMenuOptionInt("VideoLayersOBJWIN", layerSettings, (1 << 15));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1845,6 +1885,11 @@ EVT_HANDLER(DecreaseVolume, "Decrease volume")
 
 EVT_HANDLER_MASK(NextFrame, "Next Frame", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     SetMenuOption("Pause", true);
     paused = true;
     pause_next = true;
