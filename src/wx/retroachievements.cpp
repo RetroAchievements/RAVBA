@@ -166,20 +166,20 @@ static unsigned char PostRAMByteReader(size_t nOffs) { return gbReadMemory(nOffs
 static void PostRAMByteWriter(size_t nOffs, unsigned char nVal) { gbWriteMemory(nOffs + 0xE000, nVal); }
 
 // GBC RAM reader/writer targeting the first bank on work RAM
-static unsigned char GBCFirstRAMBankReader(size_t nOffs) { return gbWram[nOffs + 0x1000]; }
-static void GBCFirstRAMBankWriter(size_t nOffs, unsigned char nVal) { gbWram[nOffs + 0x1000] = nVal; }
+static unsigned char GBCFirstRAMBankReader(size_t nOffs) { return gbWram ? gbWram[nOffs + 0x1000] : 0; }
+static void GBCFirstRAMBankWriter(size_t nOffs, unsigned char nVal) { if (gbWram) gbWram[nOffs + 0x1000] = nVal; }
 
 // GBC RAM reader/writer targeting work RAM banks 2-7
-static unsigned char GBCBankedRAMReader(size_t nOffs) { return gbWram[nOffs + 0x2000]; }
-static void GBCBankedRAMWriter(size_t nOffs, unsigned char nVal) { gbWram[nOffs + 0x2000] = nVal; }
+static unsigned char GBCBankedRAMReader(size_t nOffs) { return gbWram ? gbWram[nOffs + 0x2000] : 0; }
+static void GBCBankedRAMWriter(size_t nOffs, unsigned char nVal) { if (gbWram) gbWram[nOffs + 0x2000] = nVal; }
 
 // GBA RAM reader/writer
-static unsigned char GBAByteReaderInternalRAM(size_t nOffs) { return internalRAM[nOffs]; }
-static void GBAByteWriterInternalRAM(size_t nOffs, unsigned char nVal) { internalRAM[nOffs] = nVal; }
+static unsigned char GBAByteReaderInternalRAM(size_t nOffs) { return internalRAM ? internalRAM[nOffs] : 0; }
+static void GBAByteWriterInternalRAM(size_t nOffs, unsigned char nVal) { if (internalRAM) internalRAM[nOffs] = nVal; }
 
 // GBA work RAM reader/writer
-static unsigned char GBAByteReaderWorkRAM(size_t nOffs) { return workRAM[nOffs]; }
-static void GBAByteWriterWorkRAM(size_t nOffs, unsigned char nVal) { workRAM[nOffs] = nVal; }
+static unsigned char GBAByteReaderWorkRAM(size_t nOffs) { return workRAM ? workRAM[nOffs] : 0; }
+static void GBAByteWriterWorkRAM(size_t nOffs, unsigned char nVal) { if (workRAM) workRAM[nOffs] = nVal; }
 
 void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* filename)
 {
