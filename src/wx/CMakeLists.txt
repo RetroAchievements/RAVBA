@@ -678,6 +678,13 @@ set(
     widgets/wx/checkedlistctrl.h
 )
 
+option(ENABLE_RETROACHIEVEMENTS "Enable RetroAchievements" OFF)
+if (ENABLE_RETROACHIEVEMENTS)
+    add_definitions(-DRETROACHIEVEMENTS)
+    set(SRC_WX ${SRC_WX} retroachievements.cpp ../../RAInterface/RA_Interface.cpp)
+    set(HDR_WX ${HDR_WX} retroachievements.h ../../RAInterface/RA_Interface.cpp)
+endif()
+
 set(
     RES_WX
     ${XRC_SOURCES}
@@ -756,6 +763,20 @@ if(ENABLE_FFMPEG)
     set_target_properties(
         visualboyadvance-m
         PROPERTIES LINK_FLAGS ${FFMPEG_LDFLAGS_STR}
+    )
+endif()
+
+if (ENABLE_RETROACHIEVEMENTS)
+    set_target_properties(visualboyadvance-m PROPERTIES OUTPUT_NAME RAVisualBoyAdvance-M)
+    target_link_libraries(visualboyadvance-m winhttp)
+
+    add_custom_command(TARGET visualboyadvance-m PRE_BUILD
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/MakeBuildVer.bat ${CMAKE_CURRENT_SOURCE_DIR}/RA_BuildVer.h RAVBAM RAVBA
+    )
+
+    add_custom_command(TARGET visualboyadvance-m POST_BUILD
+        # TODO: figure out why ${CMAKE_BINARY_DIR} works for FILE(COPY, but not for COMMAND
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/CopyOverlay.bat ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}
     )
 endif()
 

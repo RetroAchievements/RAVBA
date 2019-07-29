@@ -38,6 +38,11 @@ extern "C" {
     wxStaticCast(wxGetApp().frame->FindWindowByName(n), wxDialog)
 #endif
 
+#ifdef RETROACHIEVEMENTS
+#include "retroachievements.h"
+#include "RA_BuildVer.h"
+#endif
+
 void GDBBreak(MainFrame* mf);
 
 bool cmditem_lt(const struct cmditem& cmd1, const struct cmditem& cmd2)
@@ -850,6 +855,11 @@ static wxString batimp_path;
 
 EVT_HANDLER_MASK(ImportBatteryFile, "Import battery file...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("import a battery file"))
+        return;
+#endif
+
     if (!batimp_path.size())
         batimp_path = panel->bat_dir();
 
@@ -879,6 +889,11 @@ EVT_HANDLER_MASK(ImportBatteryFile, "Import battery file...", CMDEN_GB | CMDEN_G
 
 EVT_HANDLER_MASK(ImportGamesharkCodeFile, "Import GameShark code file...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("import GameShark codes"))
+        return;
+#endif
+
     static wxString path;
     wxFileDialog dlg(this, _("Select code file"), path, wxEmptyString,
         panel->game_type() == IMAGE_GBA ? _("Gameshark Code File (*.spc;*.xpc)|*.spc;*.xpc") : _("Gameshark Code File (*.gcf)|*.gcf"),
@@ -1000,6 +1015,11 @@ static wxString gss_path;
 EVT_HANDLER_MASK(ImportGamesharkActionReplaySnapshot,
     "Import GameShark Action Replay snapshot...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("import GameShark snapshots"))
+        return;
+#endif
+
     wxFileDialog dlg(this, _("Select snapshot file"), gss_path, wxEmptyString,
         panel->game_type() == IMAGE_GBA ? _("GS & PAC Snapshots (*.sps;*.xps)|*.sps;*.xps|GameShark SP Snapshots (*.gsv)|*.gsv") : _("Gameboy Snapshot (*.gbs)|*.gbs"),
         wxFD_OPEN | wxFD_FILE_MUST_EXIST);
@@ -1319,6 +1339,11 @@ EVT_HANDLER_MASK(RecordMovieStopRecording, "Stop game recording", CMDEN_GREC)
 
 EVT_HANDLER_MASK(PlayMovieStartPlaying, "Start playing movie...", CMDEN_NGREC | CMDEN_NGPLAY)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("play a movie"))
+        return;
+#endif
+
     mov_path = GetGamePath(gopts.recording_dir);
     systemStopGamePlayback();
     wxString def_name = panel->game_name() + wxT(".vmv");
@@ -1373,6 +1398,10 @@ EVT_HANDLER(Pause, "Pause (toggle)")
     else if (!IsPaused())
         panel->Resume();
 
+#ifdef RETROACHIEVEMENTS
+    RA_SetPaused(paused);
+#endif
+
     // undo next-frame's zeroing of frameskip
     int fs = frameSkip;
 
@@ -1390,6 +1419,9 @@ EVT_HANDLER_MASK(Reset, "Reset", CMDEN_GB | CMDEN_GBA)
 {
     panel->emusys->emuReset();
     // systemScreenMessage("Reset");
+#ifdef RETROACHIEVEMENTS
+    RA_OnReset();
+#endif
 }
 
 EVT_HANDLER(ToggleFullscreen, "Full screen (toggle)")
@@ -1616,6 +1648,11 @@ EVT_HANDLER_MASK(IncrGameSlotSave, "Increase state slot number and save", CMDEN_
 
 EVT_HANDLER_MASK(Rewind, "Rewind", CMDEN_REWIND)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     MainFrame* mf = wxGetApp().frame;
     GameArea* panel = mf->GetPanel();
     int rew_st = (panel->next_rewind_state + NUM_REWINDS - 1) % NUM_REWINDS;
@@ -1663,6 +1700,11 @@ EVT_HANDLER(CheatsAutoSaveLoad, "Auto save/load cheats (toggle)")
 // changed for convenience to match internal variable functionality
 EVT_HANDLER(CheatsEnable, "Enable cheats (toggle)")
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("enable cheats"))
+        return;
+#endif
+
     GetMenuOptionInt("CheatsEnable", cheatsEnabled, 1);
     update_opts();
 }
@@ -1670,6 +1712,14 @@ EVT_HANDLER(CheatsEnable, "Enable cheats (toggle)")
 // Debug menu
 EVT_HANDLER_MASK(VideoLayersBG0, "Video layer BG0 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG0", (1 << 8));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersBG0", layerSettings, (1 << 8));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1677,6 +1727,14 @@ EVT_HANDLER_MASK(VideoLayersBG0, "Video layer BG0 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersBG1, "Video layer BG1 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG1", (1 << 9));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersBG1", layerSettings, (1 << 9));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1684,6 +1742,14 @@ EVT_HANDLER_MASK(VideoLayersBG1, "Video layer BG1 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersBG2, "Video layer BG2 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG2", (1 << 10));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersBG2", layerSettings, (1 << 10));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1691,6 +1757,14 @@ EVT_HANDLER_MASK(VideoLayersBG2, "Video layer BG2 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersBG3, "Video layer BG3 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersBG3", (1 << 11));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersBG3", layerSettings, (1 << 11));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1698,6 +1772,14 @@ EVT_HANDLER_MASK(VideoLayersBG3, "Video layer BG3 (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersOBJ, "Video layer OBJ (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersOBJ", (1 << 12));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersOBJ", layerSettings, (1 << 12));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1705,6 +1787,14 @@ EVT_HANDLER_MASK(VideoLayersOBJ, "Video layer OBJ (toggle)", CMDEN_GB | CMDEN_GB
 
 EVT_HANDLER_MASK(VideoLayersWIN0, "Video layer WIN0 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersWIN0", (1 << 13));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersWIN0", layerSettings, (1 << 13));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1712,6 +1802,14 @@ EVT_HANDLER_MASK(VideoLayersWIN0, "Video layer WIN0 (toggle)", CMDEN_GB | CMDEN_
 
 EVT_HANDLER_MASK(VideoLayersWIN1, "Video layer WIN1 (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersWIN1", (1 << 14));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersWIN1", layerSettings, (1 << 14));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1719,6 +1817,14 @@ EVT_HANDLER_MASK(VideoLayersWIN1, "Video layer WIN1 (toggle)", CMDEN_GB | CMDEN_
 
 EVT_HANDLER_MASK(VideoLayersOBJWIN, "Video layer OBJWIN (toggle)", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+    {
+        SetMenuOption("VideoLayersOBJWIN", (1 << 15));
+        return;
+    }
+#endif
+
     GetMenuOptionInt("VideoLayersOBJWIN", layerSettings, (1 << 15));
     layerEnable = DISPCNT & layerSettings;
     CPUUpdateRenderBuffers(false);
@@ -1836,6 +1942,11 @@ EVT_HANDLER(DecreaseVolume, "Decrease volume")
 
 EVT_HANDLER_MASK(NextFrame, "Next Frame", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive())
+        return;
+#endif
+
     SetMenuOption("Pause", true);
     paused = true;
     pause_next = true;
@@ -1848,11 +1959,21 @@ EVT_HANDLER_MASK(NextFrame, "Next Frame", CMDEN_GB | CMDEN_GBA)
 
 EVT_HANDLER_MASK(Disassemble, "Disassemble...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("disassemble"))
+        return;
+#endif
+
     Disassemble();
 }
 
 EVT_HANDLER(Logging, "Logging...")
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view logs"))
+        return;
+#endif
+
     wxDialog* dlg = wxGetApp().frame->logdlg;
     dlg->SetWindowStyle(wxCAPTION | wxRESIZE_BORDER);
 
@@ -1867,31 +1988,61 @@ EVT_HANDLER(Logging, "Logging...")
 
 EVT_HANDLER_MASK(IOViewer, "I/O Viewer...", CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view I/O"))
+        return;
+#endif
+
     IOViewer();
 }
 
 EVT_HANDLER_MASK(MapViewer, "Map Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view maps"))
+        return;
+#endif
+
     MapViewer();
 }
 
 EVT_HANDLER_MASK(MemoryViewer, "Memory Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view memory"))
+        return;
+#endif
+
     MemViewer();
 }
 
 EVT_HANDLER_MASK(OAMViewer, "OAM Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view OAM"))
+        return;
+#endif
+
     OAMViewer();
 }
 
 EVT_HANDLER_MASK(PaletteViewer, "Palette Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view palettes"))
+        return;
+#endif
+
     PaletteViewer();
 }
 
 EVT_HANDLER_MASK(TileViewer, "Tile Viewer...", CMDEN_GB | CMDEN_GBA)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("view tiles"))
+        return;
+#endif
+
     TileViewer();
 }
 
@@ -2035,7 +2186,14 @@ EVT_HANDLER(GeneralConfigure, "General options...")
     int rew = gopts.rewind_interval;
     wxDialog* dlg = GetXRCDialog("GeneralConfig");
 
-    if (ShowModal(dlg) == wxID_OK)
+    int result = ShowModal(dlg);
+
+#ifdef RETROACHIEVEMENTS
+    if (RA_HardcoreModeIsActive() && throttle < 100 && throttle != 0)
+        throttle = 100;
+#endif
+
+    if (result == wxID_OK)
         update_opts();
 
     if (panel->game_type() != IMAGE_UNKNOWN)
@@ -2498,6 +2656,14 @@ EVT_HANDLER(wxID_ABOUT, "About...")
                     "GNU General Public License for more details.\n\n"
                     "You should have received a copy of the GNU General Public License\n"
                     "along with this program.  If not, see http://www.gnu.org/licenses ."));
+
+#ifdef RETROACHIEVEMENTS
+    wxString description = ai.GetName() + " " + ai.GetVersion() + "\n" + ai.GetDescription();
+    ai.SetName(wxT("RAVisualBoyAdvance-M"));
+    ai.SetVersion(RAVBA_VERSION_SHORT);
+    ai.SetDescription(description);
+#endif
+
     // from gtk
     ai.AddDeveloper(wxT("Forgotten"));
     ai.AddDeveloper(wxT("kxu"));

@@ -85,6 +85,7 @@ public:
     }
     virtual bool OnInit();
     virtual int OnRun();
+    virtual void CleanUp();
     virtual bool OnCmdLineHelp(wxCmdLineParser&);
     virtual bool OnCmdLineError(wxCmdLineParser&);
     virtual bool UsingWayland() { return using_wayland; }
@@ -371,6 +372,8 @@ private:
     void OnDropFile(wxDropFilesEvent&);
     // pop up menu in fullscreen mode
     void OnMenu(wxContextMenuEvent&);
+    // close warning
+    void OnClose(wxCloseEvent&);
     // window geometry
     void OnMove(wxMoveEvent& event);
     void OnSize(wxSizeEvent& event);

@@ -7,6 +7,10 @@
 #include <wx/print.h>
 #include <wx/printdlg.h>
 
+#ifdef RETROACHIEVEMENTS
+#include "retroachievements.h"
+#endif
+
 // These should probably be in vbamcore
 int systemVerbose;
 int systemFrameSkip;
@@ -402,6 +406,10 @@ void systemFrame()
 {
     if (game_recording || game_playback)
         game_frame++;
+
+#ifdef RETROACHIEVEMENTS
+    RA_DoAchievementsFrame();
+#endif
 }
 
 // technically, num is ignored in favor of finding the first

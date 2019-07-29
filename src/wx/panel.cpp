@@ -16,6 +16,10 @@
 #include "filters.h"
 #include "wxvbam.h"
 
+#ifdef RETROACHIEVEMENTS
+#include "retroachievements.h"
+#endif
+
 // release all buttons currently pressed
 static void clear_input_press();
 
@@ -50,6 +54,11 @@ GameArea::GameArea()
 
 void GameArea::LoadGame(const wxString& name)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_ConfirmLoadNewRom(false))
+        return;
+#endif
+
     rom_scene_rls = wxT("-");
     rom_scene_rls_name = wxT("-");
     rom_name = wxT("");
@@ -201,6 +210,10 @@ void GameArea::LoadGame(const wxString& name)
         }
 
         emusys = &GBSystem;
+
+#ifdef RETROACHIEVEMENTS
+        RA_OnLoadNewRom(gbCgbMode ? GBC : GB, gbRom, rom_size, loaded_game.GetName().c_str());
+#endif
     } else /* if(t == IMAGE_GBA) */
     {
         if (!(rom_size = CPULoadRom(fn))) {
@@ -281,6 +294,10 @@ void GameArea::LoadGame(const wxString& name)
         basic_width = GBAWidth;
         basic_height = GBAHeight;
         emusys = &GBASystem;
+
+#ifdef RETROACHIEVEMENTS
+        RA_OnLoadNewRom(GBA, rom, rom_size, loaded_game.GetName().c_str());
+#endif
     }
 
     if (fullScreen)
@@ -420,13 +437,18 @@ void GameArea::SetFrameTitle()
 
     if (loaded != IMAGE_UNKNOWN) {
         tit.append(loaded_game.GetFullName());
+#ifndef RETROACHIEVEMENTS
         tit.append(wxT(" - "));
+#endif
     }
 
+#ifndef RETROACHIEVEMENTS
     tit.append(wxT("VisualBoyAdvance-M "));
 #ifndef FINAL_BUILD
     tit.append(_(VERSION));
 #endif
+#endif
+
 #ifndef NO_LINK
     int playerId = GetLinkPlayerId();
 
@@ -434,9 +456,13 @@ void GameArea::SetFrameTitle()
         tit.append(_(" player "));
         tit.append(wxChar(wxT('1') + playerId));
     }
-
 #endif
+
+#ifdef RETROACHIEVEMENTS
+    RA_UpdateAppTitle(tit.c_str());
+#else
     wxGetApp().frame->SetTitle(tit);
+#endif
 }
 
 void GameArea::recompute_dirs()
@@ -470,6 +496,11 @@ void GameArea::UnloadGame(bool destruct)
 {
     if (!emulating)
         return;
+
+#ifdef RETROACHIEVEMENTS
+    if (!RA_ConfirmLoadNewRom(false))
+        return;
+#endif
 
     // last opportunity to autosave cheats
     if (gopts.autoload_cheats && cheats_dirty) {
@@ -545,6 +576,10 @@ void GameArea::UnloadGame(bool destruct)
 
     if (rewind_mem)
         num_rewind_states = 0;
+
+#ifdef RETROACHIEVEMENTS
+    RA_ActivateGame(0);
+#endif
 }
 
 bool GameArea::LoadState()
@@ -566,8 +601,17 @@ bool GameArea::LoadState(int slot)
 
 bool GameArea::LoadState(const wxFileName& fname)
 {
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("load a state"))
+        return false;
+#endif
+
     // FIXME: first save to backup state if not backup state
     bool ret = emusys->emuReadState(fname.GetFullPath().mb_fn_str());
+#ifdef RETROACHIEVEMENTS
+    if (ret)
+        RA_OnLoadState(fname.GetFullPath().c_str());
+#endif
 
     if (ret && num_rewind_states) {
         MainFrame* mf = wxGetApp().frame;
@@ -615,6 +659,10 @@ bool GameArea::SaveState(const wxFileName& fname)
 {
     // FIXME: first copy to backup state if not backup state
     bool ret = emusys->emuWriteState(fname.GetFullPath().mb_fn_str());
+#ifdef RETROACHIEVEMENTS
+    if (ret)
+        RA_OnSaveState(fname.GetFullPath().c_str());
+#endif
     wxGetApp().frame->update_state_ts(true);
     wxString msg;
     msg.Printf(ret ? _("Saved state %s") : _("Error saving state %s"),
@@ -977,6 +1025,10 @@ void GameArea::OnIdle(wxIdleEvent& event)
         }
     }
 
+#ifdef RETROACHIEVEMENTS
+    RA_ProcessInputs();
+#endif
+
     if (!emusys)
         return;
 
@@ -1085,9 +1137,10 @@ void GameArea::OnIdle(wxIdleEvent& event)
 #endif
     } else {
         was_paused = true;
-
+#ifndef RETROACHIEVEMENTS
         if (paused)
             SetExtraStyle(GetExtraStyle() & ~wxWS_EX_PROCESS_IDLE);
+#endif
     }
 
     if (do_rewind && emusys->emuWriteMemState) {
