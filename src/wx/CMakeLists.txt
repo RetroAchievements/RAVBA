@@ -770,14 +770,16 @@ if (ENABLE_RETROACHIEVEMENTS)
     set_target_properties(visualboyadvance-m PROPERTIES OUTPUT_NAME RAVisualBoyAdvance-M)
     target_link_libraries(visualboyadvance-m winhttp)
 
-    add_custom_command(TARGET visualboyadvance-m PRE_BUILD
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/MakeBuildVer.bat ${CMAKE_CURRENT_SOURCE_DIR}/RA_BuildVer.h RAVBAM RAVBA
-    )
+    if (CMAKE_HOST_SYSTEM_NAME STREQUAL Windows)
+        add_custom_command(TARGET visualboyadvance-m PRE_BUILD
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/MakeBuildVer.bat ${CMAKE_CURRENT_SOURCE_DIR}/RA_BuildVer.h RAVBAM RAVBA
+        )
 
-    add_custom_command(TARGET visualboyadvance-m POST_BUILD
-        # TODO: figure out why ${CMAKE_BINARY_DIR} works for FILE(COPY, but not for COMMAND
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/CopyOverlay.bat ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}
-    )
+        add_custom_command(TARGET visualboyadvance-m POST_BUILD
+            # TODO: figure out why ${CMAKE_BINARY_DIR} works for FILE(COPY, but not for COMMAND
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/CopyOverlay.bat ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}
+        )
+    endif()
 endif()
 
 # link libgcc/libstdc++ statically on mingw

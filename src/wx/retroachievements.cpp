@@ -189,7 +189,7 @@ void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* 
     switch (nConsole)
     {
         case GB:
-            RA_InstallMemoryBank(0, ByteReader, ByteWriter, 0x10000);
+            RA_InstallMemoryBank(0, (void*)ByteReader, (void*)ByteWriter, 0x10000);
             break;
 
         case GBC:
@@ -197,15 +197,15 @@ void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* 
             // Bits 0-2 of $FF70 indicate which bank is currently accessible to the program in the $D000-$DFFF range.
             // Since that makes it hard to work with the memory in that region when building/running achievements, the memory exposed to
             // the achievements in $D000-$DFFF is always the first bank. The remaining banks are exposed in virtual memory above $10000.
-            RA_InstallMemoryBank(0, ByteReader, ByteWriter, 0xD000);                        // Direct mapping ($0000-$CFFF)
-            RA_InstallMemoryBank(1, GBCFirstRAMBankReader, GBCFirstRAMBankWriter, 0x1000);  // First bank ($D000-$DFFF)
-            RA_InstallMemoryBank(2, PostRAMByteReader, PostRAMByteWriter, 0x2000);          // Direct mapping ($E000-$FFFF)
-            RA_InstallMemoryBank(3, GBCBankedRAMReader, GBCBankedRAMWriter, 0x6000);        // RAM banks 2-7 ($10000-$15FFF)
+            RA_InstallMemoryBank(0, (void*)ByteReader, (void*)ByteWriter, 0xD000);                        // Direct mapping ($0000-$CFFF)
+            RA_InstallMemoryBank(1, (void*)GBCFirstRAMBankReader, (void*)GBCFirstRAMBankWriter, 0x1000);  // First bank ($D000-$DFFF)
+            RA_InstallMemoryBank(2, (void*)PostRAMByteReader, (void*)PostRAMByteWriter, 0x2000);          // Direct mapping ($E000-$FFFF)
+            RA_InstallMemoryBank(3, (void*)GBCBankedRAMReader, (void*)GBCBankedRAMWriter, 0x6000);        // RAM banks 2-7 ($10000-$15FFF)
             break;
 
         case GBA:
-            RA_InstallMemoryBank(0, GBAByteReaderInternalRAM, GBAByteWriterInternalRAM, 0x8000);
-            RA_InstallMemoryBank(1, GBAByteReaderWorkRAM, GBAByteWriterWorkRAM, 0x40000);
+            RA_InstallMemoryBank(0, (void*)GBAByteReaderInternalRAM, (void*)GBAByteWriterInternalRAM, 0x8000);
+            RA_InstallMemoryBank(1, (void*)GBAByteReaderWorkRAM, (void*)GBAByteWriterWorkRAM, 0x40000);
             break;
     }
 
