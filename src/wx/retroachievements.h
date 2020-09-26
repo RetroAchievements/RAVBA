@@ -2,6 +2,7 @@
 #define __RETROACHIEVEMENTS_H_
 
 #include "../../RAInterface/RA_Interface.h"
+#include "../../RAInterface/RA_Consoles.h"
 
 void RA_Init(HWND hWnd);
 void RA_ProcessInputs();

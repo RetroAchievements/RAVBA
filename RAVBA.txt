@@ -42,10 +42,20 @@ To work around this, we cross compile from linux. Using an Ubuntu VM, checkout t
 
 ~/source/RAVBA$ export BUILD_ENV=mingw-w32
 ~/source/RAVBA$ ./installdeps MinGW-w64-i686
+~/source/RAVBA$ git submodule update
 ~/source/RAVBA$ mkdir build && cd build
-~/source/RAVBA/build$ /usr/lib/mxe/usr/bin/i686-w64-mingw32.static-cmake .. -DENABLE_SDL=ON -DENABLE_OPENAL=ON -DENABLE_RETROACHIEVEMENTS=ON -DCMAKE_SYSTEM_VERSION=7.0 -DENABLE_LTO=OFF
+~/source/RAVBA/build$ /usr/lib/mxe/usr/bin/i686-w64-mingw32.static-cmake .. -DENABLE_SDL=ON -DENABLE_OPENAL=ON -DENABLE_RETROACHIEVEMENTS=ON -DCMAKE_SYSTEM_VERSION=7.0 -DENABLE_LTO=OFF -DENABLE_NLS=OFF -DENABLE_FFMPEG=OFF -DENABLE_ONLINEUPDATES=OFF
 ~/source/RAVBA$ make -j2
 
 NOTE: the linux build process will not generate the RA_BuildVer.h file, so copy it from the Windows machine and manually update it to the correct version.
 
 The one benefit of doing this is we end up with a single binary, whereas there's 7 or 8 additional DLLs generated in the Windows project.
+
+For x64 build:
+
+~/source/RAVBA$ export BUILD_ENV=mingw-w64
+~/source/RAVBA$ ./installdeps MinGW-w64-x86_64
+~/source/RAVBA$ git submodule update
+~/source/RAVBA$ mkdir build64 && cd build64
+~/source/RAVBA/build64$ /usr/lib/mxe/usr/bin/x86_64-w64-mingw32.static-cmake .. -DENABLE_SDL=ON -DENABLE_OPENAL=ON -DENABLE_RETROACHIEVEMENTS=ON -DCMAKE_SYSTEM_VERSION=7.0 -DENABLE_LTO=OFF -DENABLE_NLS=OFF -DENABLE_FFMPEG=OFF -DENABLE_ONLINEUPDATES=OFF
+~/source/RAVBA$ make -j2
