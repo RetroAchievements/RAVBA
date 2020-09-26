@@ -4,6 +4,9 @@
 
 - [Visual Boy Advance - M](#visual-boy-advance---m)
   - [Building](#building)
+  - [Building a Libretro core](#building-a-libretro-core)
+  - [Visual Studio Support](#visual-studio-support)
+  - [Dependencies](#dependencies)
   - [Cross compiling for 32 bit on a 64 bit host](#cross-compiling-for-32-bit-on-a-64-bit-host)
   - [Cross Compiling for Win32](#cross-compiling-for-win32)
   - [CMake Options](#cmake-options)
@@ -15,14 +18,14 @@
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 [![Join the chat at https://gitter.im/visualboyadvance-m/Lobby](https://badges.gitter.im/visualboyadvance-m/Lobby.svg)](https://gitter.im/visualboyadvance-m/Lobby)
-[![Build Status](https://travis-ci.org/visualboyadvance-m/visualboyadvance-m.svg?branch=master)](https://travis-ci.org/visualboyadvance-m/visualboyadvance-m)
-[![Coverity Scan Build Status](https://scan.coverity.com/projects/16096/badge.svg)](https://scan.coverity.com/projects/visualboyadvance-m-visualboyadvance-m)
+[![travis](https://travis-ci.org/visualboyadvance-m/visualboyadvance-m.svg?branch=master)](https://travis-ci.org/visualboyadvance-m/visualboyadvance-m)
+[![appveyor](https://ci.appveyor.com/api/projects/status/5ckx25vct1q1ovfc?svg=true)](https://ci.appveyor.com/project/ZachBacon65337/visualboyadvance-m-2ys5r)
 
 # Visual Boy Advance - M
 
 Game Boy Advance Emulator
 
-Homepage and Forum: http://vba-m.com
+The Forum is here: https://vba-m.com/forums/
 
 Windows and Mac builds are in the [releases tab](https://github.com/visualboyadvance-m/visualboyadvance-m/releases).
 
@@ -35,13 +38,7 @@ It is also generally very easy to build from source, see below.
 If you are using the windows binary release and you need localization, unzip
 the `translations.zip` to the same directory as the executable.
 
-## Note for Windows Users
-
-If you are having issues, try resetting your config file first.
-
-- open file explorer
-- in the location bar, type `%USERPROFILE%\AppData\Local` and press enter
-- delete the directory called `visualboyadvance-m`
+If you are having issues, try resetting the config file first, go to `Help -> Factory Reset`.
 
 ## Building
 
@@ -61,11 +58,23 @@ make -j`nproc`
 ```
 
 `./installdeps` is supported on MSys2, Linux (Debian/Ubuntu, Fedora, Arch,
-Solus and RHEL/CentOS) and Mac OS X (homebrew, macports or fink.)
+Solus, OpenSUSE, Gentoo and RHEL/CentOS) and Mac OS X (homebrew, macports or
+fink.)
 
-The Ninja cmake generator is also now supported, including on msys2 and Visual Studio.
+The Ninja cmake generator is also now supported (except for Visual Studio.)
 
-### Visual Studio Support
+## Building a Libretro core
+
+```
+Clone this repo and then,
+$ cd src
+$ cd libretro
+$ make
+
+Copy vbam_libretro.so to your RetroArch cores directory.
+```
+
+## Visual Studio Support
 
 For visual studio, dependency management is handled automatically with vcpkg,
 just clone the repository with git and build with cmake. You can do this from
@@ -79,13 +88,16 @@ environment variable `VCPKG_ROOT` is set.
 To build in the visual studio command prompt, use something like this:
 
 ```
-mkdir vsbuild
-cd vsbuild
+mkdir build
+cd build
 cmake .. -DVCPKG_TARGET_TRIPLET=x64-windows
-msbuild /m .\ALL_BUILD.vcxproj
+msbuild -m -p:BuildInParallel=true -p:Configuration=Release .\ALL_BUILD.vcxproj 
 ```
 
-### Dependencies
+This support is new and we are still working out some issues, including support
+for static builds.
+
+## Dependencies
 
 If your OS is not supported, you will need the following:
 
@@ -93,22 +105,22 @@ If your OS is not supported, you will need the following:
 - [make](https://en.wikipedia.org/wiki/Make_(software))
 - [CMake](https://cmake.org/)
 - [git](https://git-scm.com/)
-- nasm (optional, for 32 bit builds)
+- [nasm](https://www.nasm.us/) (optional, for 32 bit builds)
 
 And the following development libraries:
 
 - [zlib](https://zlib.net/) (required)
 - [mesa](https://mesa3d.org/) (if using X11 or any OpenGL otherwise)
-- ffmpeg (optional, for game recording)
-- gettext and gettext tools (optional, with ENABLE_NLS)
-- png (required)
-- [SDL](https://www.libsdl.org/)2 (required)
+- [ffmpeg](https://ffmpeg.org/) (optional, at least version `4.0.4`, for game recording)
+- [gettext](https://www.gnu.org/software/gettext/) and gettext-tools (optional, with ENABLE_NLS)
+- [libpng](http://www.libpng.org/pub/png/libpng.html) (required)
+- [SDL2](https://www.libsdl.org/) (required)
 - [SFML](https://www.sfml-dev.org/) (optional, for link)
-- OpenAL (optional, a sound interface)
-- [wxWidgets](https://wxwidgets.org/) (required, 2.8 is still supported, --enable-stl is supported)
+- [OpenAL](https://www.openal.org/) or [openal-soft](https://kcat.strangesoft.net/openal.html) (optional, a sound interface)
+- [wxWidgets](https://wxwidgets.org/) (required for GUI, 2.8 is still supported, --enable-stl is supported)
 
 On Linux and similar, you also need the version of GTK your wxWidgets is linked
-to (usually 2 or 3).
+to (usually 2 or 3) and the xorg development libraries.
 
 Support for more OSes/distributions for `./installdeps` is planned.
 
@@ -125,9 +137,9 @@ may be `win32` which is an alias for `mingw-w64-i686` to target 32 bit Windows,
 or `mingw-gw64-x86_64` for 64 bit Windows targets.
 
 The target is implicit on MSys2 depending on which MINGW shell you started (the
-value of `$MSYSTEM`.) It will not run in the MSys shell.
+value of `$MSYSTEM`.)
 
-On Debian/Ubuntu this uses the MXE apt repository and works really well.
+On Debian/Ubuntu this uses the MXE apt repository and works quite well.
 
 On Fedora it can build using the Fedora MinGW packages, albeit with wx 2.8, no
 OpenGL support, and no Link support for lack of SFML.
@@ -138,7 +150,7 @@ broken, I will at some point redo the arch stuff to use MXE as well.
 ## CMake Options
 
 The CMake code tries to guess reasonable defaults for options, but you can
-override them on the cmake command with e.g.:
+override them, for example:
 
 ```shell
 cmake .. -DENABLE_LINK=NO
@@ -163,14 +175,15 @@ Here is the complete list:
 | ENABLE_ASM            | Enable the following two ASM options                                 | ON for 32 bit builds  |
 | ENABLE_ASM_SCALERS    | Enable x86 ASM graphic filters                                       | ON for 32 bit builds  |
 | ENABLE_MMX            | Enable MMX                                                           | ON for 32 bit builds  |
-| ENABLE_LINK           | Enable GBA linking functionality (requires SFML)                     | ON                    |
+| ENABLE_LINK           | Enable GBA linking functionality (requires SFML)                     | AUTO                  |
 | ENABLE_LIRC           | Enable LIRC support                                                  | OFF                   |
-| ENABLE_FFMPEG         | Enable ffmpeg A/V recording                                          | OFF                   |
+| ENABLE_FFMPEG         | Enable ffmpeg A/V recording                                          | AUTO                  |
+| ENABLE_ONLINEUPDATES  | Enable online update checks                                          | ON                    |
 | ENABLE_LTO            | Compile with Link Time Optimization (gcc and clang only)             | ON for release build  |
 | ENABLE_GBA_LOGGING    | Enable extended GBA logging                                          | ON                    |
 | ENABLE_DIRECT3D       | Direct3D rendering for wxWidgets (Windows, **NOT IMPLEMENTED!!!**)   | ON                    |
 | ENABLE_XAUDIO2        | Enable xaudio2 sound output for wxWidgets (Windows only)             | ON                    |
-| ENABLE_OPENAL         | Enable OpenAL for the wxWidgets port                                 | OFF                   |
+| ENABLE_OPENAL         | Enable OpenAL for the wxWidgets port                                 | AUTO                  |
 | ENABLE_SSP            | Enable gcc stack protector support (gcc only)                        | OFF                   |
 | ENABLE_ASAN           | Enable libasan sanitizers (by default address, only in debug mode)   | OFF                   |
 | VBAM_STATIC           | Try link all libs statically (the following are set to ON if ON)     | OFF                   |

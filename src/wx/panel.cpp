@@ -229,7 +229,7 @@ void GameArea::LoadGame(const wxString& name)
         if (loadpatch) {
             // don't use real rom size or it might try to resize rom[]
             // instead, use known size of rom[]
-            int size = 0x2000000;
+            int size = 0x2000000 < rom_size ? 0x2000000 : rom_size;
             applyPatch(pfn.GetFullPath().mb_str(), &rom, &size);
             // that means we no longer really know rom_size either <sigh>
         }
@@ -534,9 +534,12 @@ void GameArea::UnloadGame(bool destruct)
 #endif
     systemStopGameRecording();
     systemStopGamePlayback();
+
+#ifndef NO_DEBUGGER
     debugger = false;
     remoteCleanUp();
     mf->cmd_enable |= CMDEN_NGDB_ANY;
+#endif
 
     if (loaded == IMAGE_GB) {
         gbCleanUp();
@@ -971,7 +974,7 @@ void GameArea::Pause()
 
     // when the game is paused like this, we should not allow any
     // input to remain pressed, because they could be released
-    // outside of the game zone and we would not know about it. 
+    // outside of the game zone and we would not know about it.
     clear_input_press();
 
     if (loaded != IMAGE_UNKNOWN)
@@ -1003,6 +1006,7 @@ void GameArea::OnIdle(wxIdleEvent& event)
         LoadGame(pl);
         MainFrame* mf = wxGetApp().frame;
 
+#ifndef NO_DEBUGGER
         if (gdbBreakOnLoad)
             mf->GDBBreak();
 
@@ -1010,6 +1014,7 @@ void GameArea::OnIdle(wxIdleEvent& event)
             wxLogError(_("Not a valid GBA cartridge"));
             UnloadGame();
         }
+#endif
     }
 
     // stupid wx doesn't resize to screen size
@@ -1068,8 +1073,8 @@ void GameArea::OnIdle(wxIdleEvent& event)
         // the userdata is freed on disconnect/destruction
         this->Connect(wxEVT_SIZE,          wxSizeEventHandler(GameArea::OnSize),           NULL, this);
 
-	// we need to check if the buttons stayed pressed when focus the panel
-	w->Connect(wxEVT_KILL_FOCUS,       wxFocusEventHandler(GameArea::OnKillFocus),     NULL, this);
+        // we need to check if the buttons stayed pressed when focus the panel
+        w->Connect(wxEVT_KILL_FOCUS,       wxFocusEventHandler(GameArea::OnKillFocus),     NULL, this);
 
         w->SetBackgroundStyle(wxBG_STYLE_CUSTOM);
         w->SetSize(wxSize(basic_width, basic_height));
@@ -1116,6 +1121,7 @@ void GameArea::OnIdle(wxIdleEvent& event)
         HidePointer();
         event.RequestMore();
 
+#ifndef NO_DEBUGGER
         if (debugger) {
             was_paused = true;
             dbgMain();
@@ -1127,6 +1133,7 @@ void GameArea::OnIdle(wxIdleEvent& event)
 
             return;
         }
+#endif
 
         emusys->emuMain(emusys->emuCount);
 #ifndef NO_LINK
@@ -1196,7 +1203,7 @@ static void clear_input_press()
     int i;
     for (i = 0; i < 4; ++i)
     {
-	joypress[i] = 0;
+        joypress[i] = 0;
     }
     keys_pressed.clear();
 }
@@ -1595,6 +1602,7 @@ public:
         int outrb = systemColorDepth == 24 ? 0 : 4;
         int outstride = std::ceil(width * outbpp * scale) + outrb;
         delta += instride * procy;
+
         // FIXME: fugly hack
         if(gopts.render_method == RND_OPENGL)
             dst += (int)std::ceil(outstride * (procy + 1) * scale);
@@ -1607,7 +1615,7 @@ public:
                 return 0;
             }
 
-            src += instride;
+            //src += instride;
 
             // interframe blending filter
             // definitely not thread safe by default
@@ -1642,7 +1650,7 @@ public:
                 continue;
             }
 
-            src += instride * procy;
+            //src += instride * procy;
 
             // naturally, any of these with accumulation buffers like those of
             // the IFB filters will screw up royally as well
@@ -2232,15 +2240,15 @@ void GLDrawingPanel::DrawingPanelInit()
 #define tex_fmt out_16 ? GL_BGRA : GL_RGBA, \
                 out_16 ? GL_UNSIGNED_SHORT_1_5_5_5_REV : GL_UNSIGNED_BYTE
 #if 0
-	texsize = width > height ? width : height;
-	texsize = std::ceil(texsize * scale);
-	// texsize = 1 << ffs(texsize);
-	texsize = texsize | (texsize >> 1);
-	texsize = texsize | (texsize >> 2);
-	texsize = texsize | (texsize >> 4);
-	texsize = texsize | (texsize >> 8);
-	texsize = (texsize >> 1) + 1;
-	glTexImage2D(GL_TEXTURE_2D, 0, int_fmt, texsize, texsize, 0, tex_fmt, NULL);
+        texsize = width > height ? width : height;
+        texsize = std::ceil(texsize * scale);
+        // texsize = 1 << ffs(texsize);
+        texsize = texsize | (texsize >> 1);
+        texsize = texsize | (texsize >> 2);
+        texsize = texsize | (texsize >> 4);
+        texsize = texsize | (texsize >> 8);
+        texsize = (texsize >> 1) + 1;
+        glTexImage2D(GL_TEXTURE_2D, 0, int_fmt, texsize, texsize, 0, tex_fmt, NULL);
 #else
     // but really, most cards support non-p2 and rect
     // if not, use cairo or wx renderer
@@ -2349,12 +2357,10 @@ DXDrawingPanel::DXDrawingPanel(wxWindow* parent, int _width, int _height)
     : DrawingPanel(parent, _width, _height)
 {
     // FIXME: implement
-
 }
 
 void DXDrawingPanel::DrawArea(wxWindowDC& dc)
 {
-	
     // FIXME: implement
     if (!did_init) {
       DrawingPanelInit();
@@ -2366,22 +2372,22 @@ void DXDrawingPanel::DrawArea(wxWindowDC& dc)
 #endif
 
 #ifndef NO_FFMPEG
-static const wxString media_err(MediaRet ret)
+static const wxString media_err(recording::MediaRet ret)
 {
     switch (ret) {
-    case MRET_OK:
+    case recording::MRET_OK:
         return wxT("");
 
-    case MRET_ERR_NOMEM:
+    case recording::MRET_ERR_NOMEM:
         return _("memory allocation error");
 
-    case MRET_ERR_NOCODEC:
+    case recording::MRET_ERR_NOCODEC:
         return _("error initializing codec");
 
-    case MRET_ERR_FERR:
+    case recording::MRET_ERR_FERR:
         return _("error writing to output file");
 
-    case MRET_ERR_FMTGUESS:
+    case recording::MRET_ERR_FMTGUESS:
         return _("can't guess output format from file name");
 
     default:
@@ -2391,13 +2397,19 @@ static const wxString media_err(MediaRet ret)
     }
 }
 
+int save_speedup_frame_skip;
+
 void GameArea::StartVidRecording(const wxString& fname)
 {
-    MediaRet ret;
+    recording::MediaRet ret;
 
+    // do not skip frames when recording
+    save_speedup_frame_skip = speedup_frame_skip;
+    speedup_frame_skip = 0;
+    vid_rec.SetSampleRate(soundGetSampleRate());
     if ((ret = vid_rec.Record(fname.mb_str(), basic_width, basic_height,
              systemColorDepth))
-        != MRET_OK)
+        != recording::MRET_OK)
         wxLogError(_("Unable to begin recording to %s (%s)"), fname.mb_str(),
             media_err(ret));
     else {
@@ -2411,6 +2423,8 @@ void GameArea::StartVidRecording(const wxString& fname)
 void GameArea::StopVidRecording()
 {
     vid_rec.Stop();
+    // allow to skip frames again
+    speedup_frame_skip = save_speedup_frame_skip;
     MainFrame* mf = wxGetApp().frame;
     mf->cmd_enable &= ~CMDEN_VREC;
     mf->cmd_enable |= CMDEN_NVREC;
@@ -2423,9 +2437,10 @@ void GameArea::StopVidRecording()
 
 void GameArea::StartSoundRecording(const wxString& fname)
 {
-    MediaRet ret;
+    recording::MediaRet ret;
 
-    if ((ret = snd_rec.Record(fname.mb_str())) != MRET_OK)
+    snd_rec.SetSampleRate(soundGetSampleRate());
+    if ((ret = snd_rec.Record(fname.mb_str())) != recording::MRET_OK)
         wxLogError(_("Unable to begin recording to %s (%s)"), fname.mb_str(),
             media_err(ret));
     else {
@@ -2451,15 +2466,15 @@ void GameArea::StopSoundRecording()
 
 void GameArea::AddFrame(const uint16_t* data, int length)
 {
-    MediaRet ret;
+    recording::MediaRet ret;
 
-    if ((ret = vid_rec.AddFrame(data)) != MRET_OK) {
+    if ((ret = vid_rec.AddFrame(data, length)) != recording::MRET_OK) {
         wxLogError(_("Error in audio/video recording (%s); aborting"),
             media_err(ret));
         vid_rec.Stop();
     }
 
-    if ((ret = snd_rec.AddFrame(data)) != MRET_OK) {
+    if ((ret = snd_rec.AddFrame(data, length)) != recording::MRET_OK) {
         wxLogError(_("Error in audio recording (%s); aborting"), media_err(ret));
         snd_rec.Stop();
     }
@@ -2467,9 +2482,9 @@ void GameArea::AddFrame(const uint16_t* data, int length)
 
 void GameArea::AddFrame(const uint8_t* data)
 {
-    MediaRet ret;
+    recording::MediaRet ret;
 
-    if ((ret = vid_rec.AddFrame(data)) != MRET_OK) {
+    if ((ret = vid_rec.AddFrame(data)) != recording::MRET_OK) {
         wxLogError(_("Error in video recording (%s); aborting"), media_err(ret));
         vid_rec.Stop();
     }

@@ -588,6 +588,7 @@ static struct {
     int soundDSBValue;
 } state;
 
+#ifndef __LIBRETRO__
 // Old GBA sound state format
 static variable_desc old_gba_state[] = {
     SKIP(int, soundPaused),
@@ -673,6 +674,7 @@ variable_desc old_gba_state2[] = {
     SKIP(int, sound3ForcedOutput),
     { NULL, 0 }
 };
+#endif
 
 // New state format
 static variable_desc gba_state[] = {
@@ -718,8 +720,8 @@ static variable_desc gba_state[] = {
 
     // Emulator
     LOAD(int, soundEnableFlag),
-
-    SKIP(int[15], room_for_expansion),
+    LOAD(int, soundTicks),
+    SKIP(int[14], room_for_expansion),
 
     { NULL, 0 }
 };
@@ -806,10 +808,10 @@ void soundReadGame(gzFile in, int version)
     reset_apu();
     gb_apu->save_state(&state.apu);
 
-    if (version > SAVE_GAME_VERSION_9)
 #ifdef __LIBRETRO__
-        utilReadDataMem(in, gba_state);
+    utilReadDataMem(in, gba_state);
 #else
+    if (version > SAVE_GAME_VERSION_9)
         utilReadData(in, gba_state);
     else
         soundReadGameOld(in, version);
