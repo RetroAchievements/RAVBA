@@ -106,11 +106,21 @@ static void ResetEmulator()
     // stop movie playback
     systemStopGamePlayback();
 
-    // disable cheats
+    // disabling the menu option prevents cheats from being evaluated each frame
     if (cheatsEnabled)
     {
         cheatsEnabled = false;
         mf->SetMenuOption("CheatsEnable", 0);
+    }
+
+    // pretend there aren't any cheats and call cheatsCheckKeys to reset any ROM
+    // that was patched by the previous call to cheatsCheckKeys.
+    if (cheatsNumber)
+    {
+        int oldCheatsNumber = cheatsNumber;
+        cheatsNumber = 0;
+        cheatsCheckKeys(0, 0);
+        cheatsNumber = oldCheatsNumber;
     }
 
     // reset frame rate
