@@ -33,7 +33,7 @@ uint16_t systemGbPalette[24] = {
 int RGB_LOW_BITS_MASK;
 
 // these are local, though.
-int joypress[4], autofire;
+int joypress[4], autofire, autohold;
 static int sensorx[4], sensory[4], sensorz[4];
 bool pause_next;
 bool turbo;
@@ -73,7 +73,7 @@ void systemMessage(int id, const char* fmt, ...)
             exit(1);
     }
 
-    wxLogError(wxT("%s"), wxString(buf, wxConvLibc).c_str());
+    wxLogError(wxT("%s"), wxString(buf, wxConvUTF8).c_str());
 }
 
 static int frames = 0;
@@ -263,6 +263,13 @@ uint32_t systemReadJoypad(int joy)
     if (ret & KEYM_AUTO_B) {
         ret |= KEYM_B;
         af |= KEYM_B;
+    }
+
+    uint32_t ah = autohold;
+    uint32_t ah_but = ah | ret;
+    if (ah_but)
+    {
+        ret ^= ah;
     }
 
     static int autofire_trigger = 1;
@@ -1045,7 +1052,7 @@ void systemScreenMessage(const wxString& msg)
 
 void systemScreenMessage(const char* msg)
 {
-    systemScreenMessage(wxString(msg, wxConvLibc));
+    systemScreenMessage(wxString(msg, wxConvUTF8));
 }
 
 bool systemCanChangeSoundQuality()
@@ -1135,6 +1142,8 @@ void systemOnSoundShutdown()
 {
 }
 
+#ifndef NO_DEBUGGER
+
 extern int (*remoteSendFnc)(char*, int);
 extern int (*remoteRecvFnc)(char*, int);
 extern void (*remoteCleanUpFnc)();
@@ -1184,7 +1193,7 @@ bool debugOpenPty()
 
     if ((pty_master = posix_openpt(O_RDWR | O_NOCTTY)) < 0 || grantpt(pty_master) < 0 || unlockpt(pty_master) < 0 || !(slave_name = ptsname(pty_master))) {
         wxLogError(_("Error opening pseudo tty: %s"), wxString(strerror(errno),
-                                                          wxConvLibc)
+                                                          wxConvUTF8)
                                                           .c_str());
 
         if (pty_master >= 0) {
@@ -1195,7 +1204,7 @@ bool debugOpenPty()
         return false;
     }
 
-    pty_slave = wxString(slave_name, wxConvLibc);
+    pty_slave = wxString(slave_name, wxConvUTF8);
     remoteSendFnc = debugWritePty;
     remoteRecvFnc = debugReadPty;
     remoteCleanUpFnc = debugClosePty;
@@ -1299,11 +1308,15 @@ bool debugWaitSocket()
     return debug_remote != NULL;
 }
 
+#endif
+
 void log(const char* defaultMsg, ...)
 {
     va_list valist;
+    char buf[2048];
     va_start(valist, defaultMsg);
-    wxString msg = wxString::Format(defaultMsg, valist);
+    vsnprintf(buf, 2048, defaultMsg, valist);
+    wxString msg = wxString(buf, wxConvUTF8);
     va_end(valist);
     wxGetApp().log.append(msg);
 

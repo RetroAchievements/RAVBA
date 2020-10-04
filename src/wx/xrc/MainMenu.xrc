@@ -3,7 +3,9 @@
   <object class="wxMenuBar" name="MainMenu">
     <object class="wxMenu">
       <label>_File</label>
-      <object class="wxMenuItem" name="wxID_OPEN"/>
+      <object class="wxMenuItem" name="wxID_OPEN">
+        <label>Open...</label>
+      </object>
       <object class="wxMenuItem" name="OpenGB">
         <label>Open _GB...</label>
       </object>
@@ -37,6 +39,9 @@
       <object class="wxMenu">
         <object class="wxMenuItem" name="LoadGameRecent">
           <label>Most _recent</label>
+        </object>
+        <object class="wxMenuItem" name="LoadGameSlot">
+          <label>Load current state slot</label>
         </object>
         <object class="wxMenuItem" name="LoadGameAutoLoad">
           <label>_Auto load most recent</label>
@@ -92,6 +97,12 @@
         <object class="wxMenuItem" name="SaveGameOldest">
           <label>_Oldest slot</label>
         </object>
+        <object class="wxMenuItem" name="SaveGameSlot">
+          <label>Save current state slot</label>
+        </object>
+        <object class="wxMenuItem" name="IncrGameSlotSave">
+          <label>Increase state slot number and save</label>
+        </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="SaveGame01">
           <label>_1</label>
@@ -128,6 +139,12 @@
           <label>To _File ...</label>
         </object>
         <label>_Save state</label>
+      </object>
+      <object class="wxMenuItem" name="IncrGameSlot">
+        <label>Increase state slot number</label>
+      </object>
+      <object class="wxMenuItem" name="DecrGameSlot">
+        <label>Decrease state slot number</label>
       </object>
       <object class="separator"/>
       <object class="wxMenu">
@@ -187,7 +204,9 @@
       </object>
       <object class="separator"/>
       <object class="wxMenuItem" name="wxID_CLOSE"/>
-      <object class="wxMenuItem" name="wxID_EXIT"/>
+      <object class="wxMenuItem" name="wxID_EXIT">
+        <label>_Quit</label>
+      </object>
     </object>
     <object class="wxMenu">
       <label>_Emulation</label>
@@ -241,7 +260,7 @@
     </object>
     <object class="wxMenu">
       <label>_Options</label>
-      <object class="wxMenu">
+      <object class="wxMenu" name="LinkMenu">
         <label>_Link</label>
         <object class="wxMenuItem" name="LanLink">
           <label>Start _Network Link ...</label>
@@ -296,7 +315,7 @@
           <checkable>1</checkable>
         </object>
         <object class="wxMenu">
-          <label>_Quick resize</label>
+          <label>_Scaled resize</label>
           <object class="wxMenuItem" name="SetSize1x">
             <label>_1x</label>
           </object>
@@ -316,8 +335,18 @@
             <label>_6x</label>
           </object>
         </object>
+        <object class="wxMenuItem" name="ChangeFilter">
+          <label>Change pixel filter</label>
+        </object>
+        <object class="wxMenuItem" name="ChangeIFB">
+          <label>Change interframe blending</label>
+        </object>
         <object class="wxMenuItem" name="RetainAspect">
           <label>_Retain aspect ratio</label>
+          <checkable>1</checkable>
+        </object>
+        <object class="wxMenuItem" name="MMX">
+          <label>Enable MMX</label>
           <checkable>1</checkable>
         </object>
         <object class="separator"/>
@@ -357,13 +386,13 @@
         </object>
         <object class="wxMenuItem" name="IncreaseVolume">
           <label>_Increase volume</label>
-          <checkable>0</checkable>
+          <enabled>0</enabled>
         </object>
         <object class="wxMenuItem" name="DecreaseVolume">
           <label>_Decrease volume</label>
-          <checkable>0</checkable>
+          <enabled>0</enabled>
         </object>
-	<object class="wxMenuItem" name="ToggleSound">
+        <object class="wxMenuItem" name="ToggleSound">
           <label>_Toggle sound</label>
           <checkable>0</checkable>
         </object>
@@ -372,7 +401,7 @@
           <label>_GBA sound interpolation</label>
           <checkable>1</checkable>
         </object>
-        <object class="separator"/>        
+        <object class="separator"/>
         <object class="wxMenuItem" name="GBEnhanceSound">
           <label>_GB sound enhancement</label>
           <checkable>1</checkable>
@@ -391,7 +420,7 @@
         <object class="wxMenuItem" name="JoypadConfigure">
           <label>_Configure ...</label>
         </object>
-        <object class="separator"/>        
+        <object class="separator"/>
         <object class="wxMenu">
           <label>_Autofire</label>
           <object class="wxMenuItem" name="JoypadAutofireA">
@@ -411,13 +440,56 @@
             <checkable>1</checkable>
           </object>
         </object>
+        <object class="wxMenu">
+          <label>_Autohold</label>
+          <object class="wxMenuItem" name="JoypadAutoholdUp">
+            <label>Up</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdDown">
+            <label>Down</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdLeft">
+            <label>Left</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdRight">
+            <label>Right</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdA">
+            <label>_A</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdB">
+            <label>_B</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdL">
+            <label>_L</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdR">
+            <label>_R</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdSelect">
+            <label>Select</label>
+            <checkable>1</checkable>
+          </object>
+          <object class="wxMenuItem" name="JoypadAutoholdStart">
+            <label>Start</label>
+            <checkable>1</checkable>
+          </object>
+        </object>
       </object>
       <object class="wxMenu">
         <label>_Game Boy Advance</label>
         <object class="wxMenuItem" name="GameBoyAdvanceConfigure">
           <label>Configure ...</label>
         </object>
-        <object class="separator"/>        
+        <object class="separator"/>
         <object class="wxMenuItem" name="RTC">
           <label>_Real-time clock</label>
           <checkable>1</checkable>
@@ -482,7 +554,7 @@
         <object class="wxMenuItem" name="CheatsSearch">
           <label>Find c_heat ...</label>
         </object>
-        <object class="separator"/>        
+        <object class="separator"/>
         <object class="wxMenuItem" name="CheatsAutoSaveLoad">
           <label>A_utomatically save/load cheats</label>
           <checkable>1</checkable>
@@ -493,7 +565,7 @@
         </object>
       </object>
       <object class="separator"/>
-      <object class="wxMenu">
+      <object class="wxMenu" name="GDBMenu">
         <object class="wxMenuItem" name="DebugGDBBreak">
           <label>_Break into GDB</label>
         </object>
@@ -537,6 +609,10 @@
       </object>
       <object class="separator"/>
       <object class="wxMenu">
+        <object class="wxMenuItem" name="VideoLayersReset">
+          <label>Show all video layers</label>
+        </object>
+        <object class="separator"/>
         <object class="wxMenuItem" name="VideoLayersBG0">
           <label>BG _0</label>
           <checkable>1</checkable>
@@ -636,7 +712,9 @@
         <label>_Factory Reset...</label>
       </object>
       <object class="separator"/>
-      <object class="wxMenuItem" name="wxID_ABOUT"/>
+      <object class="wxMenuItem" name="wxID_ABOUT">
+        <label>_About...</label>
+      </object>
     </object>
   </object>
 </resource>

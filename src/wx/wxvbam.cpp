@@ -60,9 +60,9 @@ static void get_config_path(wxPathList& path, bool exists = true)
         if ((wxDirExists(s) && wxIsWritable(s)) || ((!exists || !wxDirExists(s)) && parent.IsDirWritable())) \
             path.Add(s);                                                                                     \
     } while (0)
-#define add_nonstandard_path(p)                                                                                          \
+#define add_nonstandard_path(p)                                                                              \
     do {                                                                                                     \
-        const wxString& s = p;                                                                          \
+        const wxString& s = p;                                                                               \
         wxFileName parent = wxFileName::DirName(s + wxT("//.."));                                            \
         parent.MakeAbsolute();                                                                               \
         if ((wxDirExists(s) && wxIsWritable(s)) || ((!exists || !wxDirExists(s)) && parent.IsDirWritable())) \
@@ -169,6 +169,8 @@ wxString wxvbamApp::GetConfigurationPath()
                 break;
             }
         }
+        // use default keys for input.
+        set_default_keys();
     }
 
     return data_path;
@@ -505,7 +507,7 @@ void wxvbamApp::OnInitCmdLine(wxCmdLineParser& cl)
             N_("Print configuration path and exit"),
 	    wxCMD_LINE_VAL_NONE, 0 },
         { wxCMD_LINE_SWITCH, t("f"), t("fullscreen"),
-            N_("Start in full-screen mode"), 
+            N_("Start in full-screen mode"),
 	    wxCMD_LINE_VAL_NONE, 0 },
 #if !defined(NO_LINK) && !defined(__WXMSW__)
         { wxCMD_LINE_SWITCH, t("s"), t("delete-shared-state"),

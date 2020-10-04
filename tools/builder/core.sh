@@ -26,12 +26,12 @@ case "\$CC" in
         ;;
     *)
         if command -v ccache >/dev/null; then
-            case "\$REQUIRED_CMAKE_ARGS" in
+            case "\$CMAKE_REQUIRED_ARGS" in
                 *ccache*)
                     :
                     ;;
                 *)
-                    REQUIRED_CMAKE_ARGS="\$REQUIRED_CMAKE_ARGS -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER=\$CC -DCMAKE_CXX_COMPILER=\$CXX"
+                    CMAKE_REQUIRED_ARGS="\$CMAKE_REQUIRED_ARGS -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER=\$CC -DCMAKE_CXX_COMPILER=\$CXX"
                     ;;
             esac
             export CC="ccache \$CC"
@@ -40,10 +40,10 @@ case "\$CC" in
         ;;
 esac
 
-export CPPFLAGS="$CPPFLAGS${CPPFLAGS:+ }-I\$BUILD_ROOT/root/include"
-export CFLAGS="$CFLAGS${CFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -pthread -lm"
-export CXXFLAGS="$CXXFLAGS${CXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -pthread -lm"
-export OBJCXXFLAGS="$OBJCXXFLAGS${OBJCXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -pthread -lm"
+export CPPFLAGS="$CPPFLAGS${CPPFLAGS:+ }-I\$BUILD_ROOT/root/include -DCURL_STATICLIB -DGRAPHITE2_STATIC"
+export CFLAGS="$CFLAGS${CFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
+export CXXFLAGS="$CXXFLAGS${CXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
+export OBJCXXFLAGS="$OBJCXXFLAGS${OBJCXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
 export LDFLAGS="$LDFLAGS${LDFLAGS:+ }-fPIC -L\$BUILD_ROOT/root/lib -pthread -lm"
 export STRIP="\${STRIP:-strip}"
 
@@ -102,13 +102,14 @@ ORIG_PATH=$PATH
 PRE_BUILD_DISTS="$PRE_BUILD_DISTS bzip2 xz unzip"
 
 DISTS=$DISTS'
-    bzip2           https://github.com/nemequ/bzip2/releases/download/v1.0.6/bzip2-1.0.6.tar.gz                 lib/libbz2.a
-    xz              https://tukaani.org/xz/xz-5.2.3.tar.gz                                                      lib/liblzma.a
+    bzip2           ftp://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz                                           lib/libbz2.a
+    xz              https://tukaani.org/xz/xz-5.2.4.tar.gz                                                      lib/liblzma.a
     unzip           https://downloads.sourceforge.net/project/infozip/UnZip%206.x%20%28latest%29/UnZip%206.0/unzip60.tar.gz     bin/unzip
-    zlib            https://zlib.net/zlib-1.2.11.tar.gz                                                         lib/libz.a
+    zlib            https://www.zlib.net/zlib-1.2.11.tar.gz                                                     lib/libz.a
     ccache          https://www.samba.org/ftp/ccache/ccache-3.4.3.tar.xz                                        bin/ccache
     zip             https://downloads.sourceforge.net/project/infozip/Zip%203.x%20%28latest%29/3.0/zip30.tar.gz                 bin/zip
-    openssl         https://www.openssl.org/source/openssl-1.0.2p.tar.gz                                        lib/libssl.a
+    openssl         https://www.openssl.org/source/openssl-1.1.1c.tar.gz                                        lib/libssl.a
+    curl            https://curl.haxx.se/download/curl-7.65.3.tar.xz                                            lib/libcurl.a
     cmake           https://cmake.org/files/v3.13/cmake-3.13.0-rc1.tar.gz                                       bin/cmake
     m4              http://ftp.gnu.org/gnu/m4/m4-1.4.18.tar.xz                                                  bin/m4
     autoconf        https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz                                       bin/autoconf
@@ -117,8 +118,8 @@ DISTS=$DISTS'
     libtool         https://ftp.gnu.org/gnu/libtool/libtool-2.4.6.tar.xz                                        bin/libtool
     xorg-macros     https://www.x.org/archive//individual/util/util-macros-1.19.1.tar.bz2                       share/pkgconfig/xorg-macros.pc
     help2man        https://ftp.gnu.org/gnu/help2man/help2man-1.47.5.tar.xz                                     bin/help2man
-    libiconv        https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.15.tar.gz                                   lib/libiconv.a
-    gettext         http://ftp.gnu.org/pub/gnu/gettext/gettext-0.19.8.1.tar.xz                                  lib/libintl.a
+    libiconv        https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.16.tar.gz                                   lib/libiconv.a
+    gettext         http://ftp.gnu.org/pub/gnu/gettext/gettext-0.19.8.1.tar.xz                                    lib/libintl.a
     getopt          http://frodo.looijaard.name/system/files/software/getopt/getopt-1.1.6.tar.gz                bin/getopt
     gsed            http://ftp.gnu.org/gnu/sed/sed-4.4.tar.xz                                                   bin/sed
     bison           https://ftp.gnu.org/gnu/bison/bison-3.0.5.tar.xz                                            bin/bison
@@ -133,7 +134,7 @@ DISTS=$DISTS'
     yasm            http://www.tortall.net/projects/yasm/releases/yasm-1.3.0.tar.gz                             bin/yasm
     pcre            https://ftp.pcre.org/pub/pcre/pcre-8.41.tar.bz2                                             lib/libpcre.a
     libffi          ftp://sourceware.org/pub/libffi/libffi-3.2.1.tar.gz                                         lib/libffi.a
-    c2man           http://www.ciselant.de/c2man/c2man-2.0@42.tar.gz                                            bin/c2man
+    c2man           https://github.com/fribidi/c2man/archive/577ed4095383ef5284225d45709e6b5f0598a064.tar.gz    bin/c2man
     libxml2         ftp://xmlsoft.org/libxml2/libxml2-2.9.8.tar.gz                                              lib/libxml2.a
     libxslt         https://github.com/GNOME/libxslt/archive/v1.1.33-rc2.tar.gz                                 lib/libxslt.a
     XML-NamespaceSupport https://cpan.metacpan.org/authors/id/P/PE/PERIGRIN/XML-NamespaceSupport-1.12.tar.gz    perl5/lib/perl5/XML/NamespaceSupport.pm
@@ -169,49 +170,48 @@ DISTS=$DISTS'
     bakefile        https://github.com/vslavik/bakefile/archive/33c270a565ba0954cca9611b2443593b2e9e698a.tar.gz bin/bakefile_gen
     XML-Parser      https://cpan.metacpan.org/authors/id/T/TO/TODDR/XML-Parser-2.44.tar.gz                      perl5/man/man3/XML*Parser.3*
     intltool        https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz                bin/intltoolize
-    ninja           https://github.com/ninja-build/ninja/archive/v1.8.2.tar.gz                                  bin/ninja
-    meson           https://github.com/mesonbuild/meson/releases/download/0.44.0/meson-0.44.0.tar.gz            bin/meson
+    ninja           https://github.com/ninja-build/ninja/archive/v1.9.0.tar.gz                                  bin/ninja
+    meson           https://github.com/mesonbuild/meson/releases/download/0.51.2/meson-0.51.2.tar.gz            bin/meson
     glib            https://github.com/GNOME/glib/archive/2.58.1.tar.gz                                         lib/libglib-2.0.a
-    libgpg-error    https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.27.tar.bz2                     lib/libgpg-error.a
-    libgcrypt       https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.2.tar.bz2                          lib/libgcrypt.a
-    libsecret       http://ftp.gnome.org/pub/gnome/sources/libsecret/0.18/libsecret-0.18.5.tar.xz               lib/libsecret-1.a
-    sdl2            https://www.libsdl.org/release/SDL2-2.0.9.tar.gz                                            lib/libSDL2.a
-    flac            https://github.com/xiph/flac/archive/f7cd466c24fb5d1966943f3ea36a1f4a37858597.tar.gz        lib/libFLAC.a
-    libogg          http://downloads.xiph.org/releases/ogg/libogg-1.3.2.tar.xz                                  lib/libogg.a
-    libvorbis       https://github.com/xiph/vorbis/archive/v1.3.5.tar.gz                                        lib/libvorbis.a
+    libgpg-error    https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.36.tar.bz2                     lib/libgpg-error.a
+    libgcrypt       https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.5.tar.bz2                          lib/libgcrypt.a
+    libsecret       http://ftp.gnome.org/pub/gnome/sources/libsecret/0.19/libsecret-0.19.1.tar.xz               lib/libsecret-1.a
+    sdl2            https://www.libsdl.org/release/SDL2-2.0.10.tar.gz                                           lib/libSDL2.a
+    flac            https://ftp.osuosl.org/pub/xiph/releases/flac/flac-1.3.3.tar.xz                             lib/libFLAC.a
+    libogg          http://downloads.xiph.org/releases/ogg/libogg-1.3.4.tar.xz                                  lib/libogg.a
+    libvorbis       https://github.com/xiph/vorbis/archive/v1.3.6.tar.gz                                        lib/libvorbis.a
     harfbuzz        https://www.freedesktop.org/software/harfbuzz/release/harfbuzz-1.7.5.tar.bz2                lib/libharfbuzz.a
     sfml            https://github.com/SFML/SFML/archive/013d053277c980946bc7761a2a088f1cbb788f8c.tar.gz        lib/libsfml-system-s.a
     shared-mime-info http://freedesktop.org/~hadess/shared-mime-info-1.9.tar.xz                                 bin/update-mime-database
-    wxwidgets       https://github.com/wxWidgets/wxWidgets/releases/download/v3.1.2/wxWidgets-3.1.2.tar.bz2     lib/libwx_baseu-3.1*.a
-    graphite2       https://github.com/silnrsi/graphite/releases/download/1.3.10/graphite2-1.3.10.tgz           lib/libgraphite2.a
-    xvidcore        http://downloads.xvid.org/downloads/xvidcore-1.3.4.tar.bz2                                  lib/libxvidcore.a
+    wxwidgets       https://github.com/wxWidgets/wxWidgets/archive/1753ed403765269bf9f6d3bb540f7e77a8758e39.tar.gz lib/libwx_baseu-3.1*.a
+    graphite2       https://github.com/silnrsi/graphite/archive/ce0e793f22127d7ba6422d440bd83b58f864ef7e.tar.gz lib/libgraphite2.a
+    xvidcore        http://downloads.xvid.org/downloads/xvidcore-1.3.5.tar.bz2                                  lib/libxvidcore.a
     fribidi         https://github.com/fribidi/fribidi/releases/download/v1.0.1/fribidi-1.0.1.tar.bz2           lib/libfribidi.a
-    libgsm          http://www.quut.com/gsm/gsm-1.0.17.tar.gz                                                   lib/libgsm.a
+    libgsm          http://www.quut.com/gsm/gsm-1.0.18.tar.gz                                                   lib/libgsm.a
     libmodplug      https://github.com/Konstanty/libmodplug/archive/5a39f5913d07ba3e61d8d5afdba00b70165da81d.tar.gz lib/libmodplug.a
     libopencore-amrnb https://downloads.sourceforge.net/project/opencore-amr/opencore-amr/opencore-amr-0.1.5.tar.gz lib/libopencore-amrnb.a
-    opus            https://archive.mozilla.org/pub/opus/opus-1.2.1.tar.gz                                      lib/libopus.a
+    opus            https://archive.mozilla.org/pub/opus/opus-1.3.1.tar.gz                                      lib/libopus.a
     snappy          https://github.com/google/snappy/archive/1.1.7.tar.gz                                       lib/libsnappy.a
-    libsoxr         https://downloads.sourceforge.net/project/soxr/soxr-0.1.2-Source.tar.xz                     lib/libsoxr.a
+    libsoxr         https://downloads.sourceforge.net/project/soxr/soxr-0.1.3-Source.tar.xz                     lib/libsoxr.a
     speex           http://downloads.us.xiph.org/releases/speex/speex-1.2.0.tar.gz                              lib/libspeex.a
     libtheora       https://github.com/Distrotech/libtheora/archive/17b02c8c564475bb812e540b551219fc42b1f75f.tar.gz lib/libtheora.a
     vidstab         https://github.com/georgmartius/vid.stab/archive/v1.1.0.tar.gz                              lib/libvidstab.a
     libvo-amrwbenc  https://github.com/mstorsjo/vo-amrwbenc/archive/v0.1.3.tar.gz                               lib/libvo-amrwbenc.a
     mp3lame         https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz                 lib/libmp3lame.a
-    libass          https://github.com/libass/libass/releases/download/0.13.7/libass-0.13.7.tar.xz              lib/libass.a
-    libbluray       ftp://ftp.videolan.org/pub/videolan/libbluray/1.0.2/libbluray-1.0.2.tar.bz2                 lib/libbluray.a
-    libvpx          http://storage.googleapis.com/downloads.webmproject.org/releases/webm/libvpx-1.6.1.tar.bz2  lib/libvpx.a
+    libass          https://github.com/libass/libass/releases/download/0.14.0/libass-0.14.0.tar.xz              lib/libass.a
+    libbluray       https://download.videolan.org/pub/videolan/libbluray/1.1.2/libbluray-1.1.2.tar.bz2          lib/libbluray.a
+    libvpx          https://github.com/webmproject/libvpx/archive/v1.8.1.tar.gz                                 lib/libvpx.a
     libwavpack      http://www.wavpack.com/wavpack-5.1.0.tar.bz2                                                lib/libwavpack.a
-    libx264         ftp://ftp.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-20171228-2245.tar.bz2      lib/libx264.a
-    libx265         https://bitbucket.org/multicoreware/x265/downloads/x265_2.5.tar.gz                          lib/libx265.a
+    libx264         https://download.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-20190913-2245-stable.tar.bz2      lib/libx264.a
+    libx265         https://bitbucket.org/multicoreware/x265/downloads/x265_3.1.2.tar.gz                        lib/libx265.a
     libxavs         https://github.com/Distrotech/xavs/archive/distrotech-xavs-git.tar.gz                       lib/libxavs.a
     libzmq          https://github.com/zeromq/libzmq/releases/download/v4.2.2/zeromq-4.2.2.tar.gz               lib/libzmq.a
-    libzvbi         https://downloads.sourceforge.net/project/zapping/zvbi/0.2.35/zvbi-0.2.35.tar.bz2           lib/libzvbi.a
-    ffmpeg          https://github.com/ffmpeg/ffmpeg/archive/0c78b6a416c661afed745d44495b5194f714fb96.tar.gz    lib/libavformat.a
+#   libzvbi         https://downloads.sourceforge.net/project/zapping/zvbi/0.2.35/zvbi-0.2.35.tar.bz2           lib/libzvbi.a
+    ffmpeg          https://ffmpeg.org/releases/ffmpeg-4.2.1.tar.bz2                                            lib/libavformat.a
 '
 
 # for now we don't build ffmpeg because game recording is broken
-BUILD_FFMPEG=
-PROJECT_ARGS="$PROJECT_ARGS -DENABLE_FFMPEG=NO"
+BUILD_FFMPEG=1
 
 FFMPEG_DISTS='
     graphite2 xvidcore fribidi libgsm libmodplug libopencore-amrnb opus snappy
@@ -222,25 +222,36 @@ FFMPEG_DISTS='
 : ${PATH_SEP:=':'}
 
 # these two can be set to always be included regardless of overrides
-export REQUIRED_CONFIGURE_ARGS="$REQUIRED_CONFIGURE_ARGS"
-export REQUIRED_CMAKE_ARGS="$REQUIRED_CMAKE_ARGS"
-
-export CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-shared --enable-static --prefix=/usr"
+export CONFIGURE_REQUIRED_ARGS="$CONFIGURE_REQUIRED_ARGS"
+export CMAKE_REQUIRED_ARGS="$CMAKE_REQUIRED_ARGS"
 
 export CMAKE_BASE_ARGS="$CMAKE_BASE_ARGS -DBUILD_SHARED_LIBS=NO -DENABLE_SHARED=NO -DCMAKE_PREFIX_PATH:FILEPATH=\"\$CMAKE_PREFIX_PATH\" -DCMAKE_BUILD_TYPE=Release"
 
-export CMAKE_ARGS="$CMAKE_BASE_ARGS $CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=/usr"
+export CONFIGURE_INSTALL_ARGS="--prefix=/usr --sysconfdir=/etc"
 
-export MESON_ARGS="--prefix /usr --buildtype release --default-library static -Dintrospection=false"
+export CMAKE_INSTALL_ARGS="-DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_FULL_SYSCONFDIR=/etc"
+
+export MESON_INSTALL_ARGS="--prefix /usr --sysconfdir /etc"
+
+if [ -z "$target_os" ] && [ "$os" = linux ] && [ "$bits" = 64 ]; then
+    export CONFIGURE_INSTALL_ARGS="$CONFIGURE_INSTALL_ARGS --libdir=/usr/lib64"
+    export MESON_INSTALL_ARGS="$MESON_INSTALL_ARGS --libdir /usr/lib64"
+    export CMAKE_INSTALL_ARGS="$CMAKE_INSTALL_ARGS -DCMAKE_INSTALL_RPATH=/usr/lib64 -DCMAKE_INSTALL_LIBDIR=/usr/lib64"
+fi
+
+export CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-shared --enable-static $CONFIGURE_INSTALL_ARGS"
+export CMAKE_ARGS="$CMAKE_BASE_ARGS $CMAKE_ARGS $CMAKE_INSTALL_ARGS"
+export MESON_ARGS="--buildtype release --default-library static -Dintrospection=false $MESON_INSTALL_ARGS"
 
 DIST_PATCHES=$DIST_PATCHES'
     m4              https://raw.githubusercontent.com/gentoo/gentoo/master/sys-devel/m4/files/m4-1.4.18-glibc228.patch
     docbook2x       https://gist.githubusercontent.com/rkitover/0b5dcc95a0703a9b0e0e7eb6d325a98e/raw/e256d2fad8d19633ac8abe02a0d1e119063d1fd9/docbook2x.patch
     ccache          https://gist.githubusercontent.com/rkitover/4dd30c2841a2131be8715038f538d622/raw/40a8f0f50aa6ca5f9658a0c37aa17393cc80c109/ccache-3.4.2-msys.patch
-    graphite2       https://gist.githubusercontent.com/rkitover/418600634d7cf19e2bf1c3708b50c042/raw/839b72d9cda545f2e3b640d743c1bd44b89861b9/graphite2-1.3.10-static.patch
+    graphite2       https://gist.githubusercontent.com/rkitover/e753f41a7f6461ad412c2d076ec24e0f/raw/d0c2b8cccd556e407e15da8a2e739a902bd1a3b5/graphite2-static-cmake-opts.patch
     python2         https://gist.githubusercontent.com/rkitover/2d9e5baff1f1cc4f2618dee53083bd35/raw/7f33fcf5470a9f1013ac6ae7bb168368a98fe5a0/python-2.7.14-custom-static-openssl.patch https://gist.githubusercontent.com/rkitover/afab7ed3ac7ce1860c43a258571c8ae1/raw/6f5fc90a7acf5f5c3ffda2edf402b28f469a4b3b/python-2.7.14-static-libintl.patch
     python3         https://gist.githubusercontent.com/rkitover/93d89a679705875c59275fb0a8f22b45/raw/6149e7fa3920d6c674c79448c5a4c9313620e06c/python-3.6.3-custom-static-openssl.patch https://gist.githubusercontent.com/rkitover/b18f19eafda3775a9652cc9cdf3ec914/raw/ed14c34bf9f205ccc3a4684dbdb83f8620162b98/python-3.6.3-static-libintl.patch
     intltool        https://gist.githubusercontent.com/rkitover/d638882f52e5d5f8e392cbf6842cd6d0/raw/dcfbe358bbb8b89f88b40a9c3402494552fd33f8/intltool-0.51.0.patch
+    libgpg-error    https://raw.githubusercontent.com/gentoo/gentoo/master/dev-libs/libgpg-error/files/libgpg-error-1.36-gawk5-support.patch
 '
 
 DIST_TAR_ARGS="$DIST_TAR_ARGS
@@ -259,6 +270,7 @@ DIST_CONFIGURE_TYPES="$DIST_CONFIGURE_TYPES
     graphviz        autoreconf
     docbook2x       autoreconf
     libvorbis       autoreconf
+    libgpg-error    autoreconf
 "
 
 DIST_RELOCATION_TYPES="$DIST_RELOCATION_TYPES
@@ -267,7 +279,6 @@ DIST_RELOCATION_TYPES="$DIST_RELOCATION_TYPES
 
 DIST_PRE_BUILD="$DIST_PRE_BUILD
 #    xz              mkdir -p build-aux; touch build-aux/config.rpath; mkdir -p po; touch po/Makefile.in.in; sed -i.bak 's/ po / /g' Makefile.am;
-    openssl         sed -E -i.bak '/^build_all:/{; s/ build_tests / /; }' Makefile.org;
     getopt          sed -i.bak 's/\\\$(LDFLAGS)\\(.*\\)\$/\\1 \$(LDFLAGS)/' Makefile;
     libicu          cd source;
 #    flex-2.6.3      sed -i.bak '/^'\"\$TAB\"'tests \\\\\$/d' Makefile.am;
@@ -307,7 +318,7 @@ DIST_POST_BUILD="$DIST_POST_BUILD
     flex-2.6.3      build_dist flex || :;
     libtool         ln -sf \"\$BUILD_ROOT/root/bin/libtoolize\" \"\$BUILD_ROOT/root/bin/glibtoolize\";
     glib            rebuild_dist gettext --without-included-glib --without-included-libxml;
-    graphviz        (cd \"\$BUILD_ROOT/root/bin\"; path_exists dot_static && ! path_exists dot && ln -sf \"\$BUILD_ROOT/root/bin/dot_static\" ./dot || :);
+#    graphviz        (cd \"\$BUILD_ROOT/root/bin\"; path_exists dot_static && ! path_exists dot && ln -sf \"\$BUILD_ROOT/root/bin/dot_static\" ./dot || :);
     libxml2         mkdir -p \"\$BUILD_ROOT/root/etc/xml\"; \
                     xmlcatalog --noout --create \"\$(cygpath -m \"\$BUILD_ROOT/root/etc/xml/catalog.xml\")\" || :;
     python2         pip2 install six;
@@ -317,21 +328,14 @@ DIST_POST_BUILD="$DIST_POST_BUILD
                     sed -i.bak \"s|/usr/share/fonts|\$BUILD_ROOT/root/share/fonts|g\" \"\$BUILD_ROOT/root/etc/fonts/fonts.conf\";
 "
 
-DIST_POST_CONFIGURE="$DIST_POST_CONFIGURE
-    #
-    # I tried to use this to make openssl build in parallel, but it fails unpredictably.
-    #
-    #openssl         sed -E -i.bak ' \
-    #    s/^(\\t+)([^\\t]+\\\$\\((BUILD_ONE_CMD|RECURSIVE_BUILD_CMD|RECURSIVE_MAKE)\\))/\1+ \2/ \
-    #' \$(find . -name Makefile);
-"
-
 DIST_CONFIGURE_OVERRIDES="$DIST_CONFIGURE_OVERRIDES
     openssl     ./config no-shared --prefix=/usr --openssldir=/etc/ssl
     cmake       ./configure --prefix=/usr --no-qt-gui --parallel=\$NUM_CPUS --enable-ccache
-    zlib        ./configure --static --prefix=/usr
+    zlib        ./configure --prefix=/usr --static
     XML-SAX     echo no | PERL_MM_USE_DEFAULT=0 perl Makefile.PL
-    wxwidgets   ./configure \$REQUIRED_CONFIGURE_ARGS --disable-shared --prefix=/usr --enable-stl --disable-precomp-headers --enable-cxx11 --enable-permissive --with-opengl --with-libpng
+    wxwidgets   ./configure \$CONFIGURE_REQUIRED_ARGS --disable-shared --prefix=/usr --enable-stl --disable-precomp-headers --enable-cxx11 --enable-permissive --with-opengl --with-libpng
+    libvpx      ./configure --disable-shared --enable-static --prefix=/usr --disable-unit-tests --disable-tools --disable-docs --disable-examples
+    ffmpeg      ./configure --disable-shared --enable-static --prefix=/usr --pkg-config-flags=--static --enable-nonfree --extra-version=tessus --enable-avisynth --enable-fontconfig --enable-gpl --enable-version3 --enable-libass --enable-libbluray --enable-libfreetype --enable-libgsm --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopus --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libvidstab --enable-libvo-amrwbenc --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libx264 --enable-libx265 --enable-libxavs --enable-libxvid --enable-libzmq --enable-openssl --enable-lzma --extra-cflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-cxxflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-objcflags='-DMODPLUG_STATIC -DZMQ_STATIC'
 "
 
 DIST_BUILD_OVERRIDES="$DIST_BUILD_OVERRIDES
@@ -362,11 +366,12 @@ DIST_ARGS="$DIST_ARGS
     libicu      --disable-extras --disable-tools --disable-tests --disable-samples
     gettext     --with-included-gettext --with-included-glib --with-included-libcroco --with-included-libunistring --with-included-libxml --disable-curses CPPFLAGS=\"\$CPPFLAGS -DLIBXML_STATIC\"
     pkgconfig   --with-internal-glib --with-libiconv=gnu
+    curl        --with-ssl --without-brotli
     pcre        --enable-utf8 --enable-pcre8 --enable-pcre16 --enable-pcre32 --enable-unicode-properties --enable-pcregrep-libz --enable-pcregrep-libbz2 --enable-jit
     libxslt     --without-python --without-crypto
     libgd       --without-xpm
     fontconfig  --with-baseconfigdir=/etc/fonts 
-    graphviz    --disable-ltdl --without-x CFLAGS=\"-include \$PWD/declspec.h \$CFLAGS\"
+    graphviz    --disable-ltdl --without-x --disable-swig CFLAGS=\"-include \$PWD/declspec.h \$CFLAGS\"
     python2     --with-ensurepip --with-system-expat
     python3     --with-ensurepip --with-system-expat
     glib        --with-libiconv=gnu
@@ -377,8 +382,8 @@ DIST_ARGS="$DIST_ARGS
     libcroco    --disable-Bsymbolic
     freetype    --with-harfbuzz=no
     harfbuzz    --with-cairo=no --with-icu=no
+    graphite2   -DGRAPHITE2_NFILEFACE=ON -DGRAPHITE2_TESTS=OFF -DGRAPHITE2_DOCS=OFF
     flac        --disable-ogg
-    libvpx      --disable-unit-tests --disable-tools --disable-docs --disable-examples
     libxavs     --disable-asm
     libzvbi     --without-x
     libxml2     --without-python
@@ -387,40 +392,31 @@ DIST_ARGS="$DIST_ARGS
     vidstab     -DUSE_OMP=NO
     libx264     --enable-pic
     libx265     -DHIGH_BIT_DEPTH=ON -DENABLE_ASSEMBLY=OFF -DENABLE_CLI=OFF
-
-    ffmpeg      --pkg-config-flags=--static --enable-nonfree --extra-version=tessus --enable-avisynth --enable-fontconfig --enable-gpl --enable-version3 --enable-libass --enable-libbluray --enable-libfreetype --enable-libgsm --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopus --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libvidstab --enable-libvo-amrwbenc --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libx264 --enable-libx265 --enable-libxavs --enable-libxvid --enable-libzmq --enable-libzvbi --enable-openssl --enable-lzma --extra-cflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-cxxflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-objcflags='-DMODPLUG_STATIC -DZMQ_STATIC'
-
-#
-# TODO: add these if possible (from brew) --enable-indev=qtkit --enable-securetransport --enable-chromaprint --enable-ffplay --enable-frei0r --enable-libbs2b --enable-libcaca --enable-libfdk-aac --enable-libgme --enable-libgsm --enable-librtmp --enable-librubberband --enable-libssh --enable-libtesseract --enable-libtwolame --enable-webp --enable-libzimg
-#
-# these require > 10.7:
-#   --enable-opencl       # requires 10.8
-#   --enable-videotoolbox # requires 10.8
 "
-
 
 export DIST_BARE_MAKE_ARGS='CC="$CC"'
 
 export ALL_MAKE_ARGS='V=1 VERBOSE=1'
 
-# have to disable ccache for openssl
 DIST_MAKE_ARGS="$DIST_MAKE_ARGS
-    openssl     CC=\"\$CC\" CXX=\"\$CXX\" LDFLAGS=\"\$LDFLAGS\" -j1
+    openssl     CC=\"\$CC\"
     getopt      LDFLAGS=\"\$LDFLAGS -lintl -liconv\" CFLAGS=\"\$CFLAGS\"
     bzip2       libbz2.a bzip2 bzip2recover CFLAGS=\"\$CFLAGS\" LDFLAGS=\"\$LDFLAGS\"
     unzip       generic2
     zip         generic
     expat       DOCBOOK_TO_MAN=docbook2man
     shared-mime-info    -j1
+    xvidcore    -j1
     fontconfig  LIBS=\"-lintl -liconv\"
+    libgsm      CC=\"\$CC \$CFLAGS\"
 "
 
 DIST_MAKE_INSTALL_ARGS="$DIST_MAKE_INSTALL_ARGS
     openssl     MANDIR=/share/man
-    libgsm      CC=\"\$CC\"
 "
 
 DIST_EXTRA_LDFLAGS="$DIST_EXTRA_LDFLAGS
+    glib        -liconv
     graphviz    -lpcreposix
     doxygen     -lintl -liconv
     ffmpeg      -lm -llzma -lpthread
@@ -457,7 +453,7 @@ builder() {
     unpack_needed_dists $DOWNLOADED_DISTS
     build_needed_dists  $UNPACKED_DISTS
 
-    build_project
+    build_project "$@"
 }
 
 read_command_line() {
@@ -502,15 +498,21 @@ setup() {
 
     OPWD=$PWD
     cd "$BUILD_ROOT/root"
-    for d in perl5 share etc man doc; do
-        [ -d "$d" ] || mkdir "$d"
+
+    for d in bin perl5 share etc man doc; do
+        mkdir -p "$d"
     done
+
+    # things like strawberry perl very rudely put this in the PATH
+    [ -L bin/gmake ] || ln -s "$(command -v make)" bin/gmake
+
     cd "$OPWD"
 
     if [ -z "$BUILD_FFMPEG" ]; then
         for dist in $FFMPEG_DISTS; do
             table_line_remove DISTS $dist
         done
+        PROJECT_ARGS="$PROJECT_ARGS -DENABLE_FFMPEG=NO"
     fi
 
     DIST_NAMES=$(  table_column DISTS 0 3)
@@ -688,12 +690,12 @@ msys2_install_core_deps() {
     pacman -Sy
 
     set --
-    for p in binutils curl crt-git gcc gcc-libs headers-git tools-git windows-default-manifest libmangle-git; do
+    for p in binutils curl crt-git gcc gcc-libs headers-git tools-git windows-default-manifest libmangle-git meson; do
         set -- "$@" "${target}-${p}"
     done
 
     # install
-    pacman --noconfirm --needed -S make tar patch diffutils ccache perl msys2-w32api-headers msys2-runtime-devel gcc gcc-libs mpfr windows-default-manifest python2 "$@"
+    pacman --noconfirm --needed -S make tar patch diffutils ccache perl msys2-w32api-headers msys2-runtime-devel gcc gcc-libs mpfr windows-default-manifest python python2 pass "$@"
 
     # make sure msys perl takes precedence over mingw perl if the latter is installed
     mkdir -p "$BUILD_ROOT/root/bin"
@@ -743,6 +745,12 @@ mac_install_core_deps() {
 
         error 'Please install XCode and the XCode Command Line Tools, then run this script again. On newer systems this can be done with: [35m;xcode-select --install[0m'
     fi
+
+    if ! command -v brew >/dev/null; then
+        error 'Please install Mac Homebrew: [35m;https://brew.sh/[0m'
+    fi
+
+    brew -v install perl
 }
 
 setup_tmp_dir() {
@@ -1419,15 +1427,15 @@ build_dist() {
 
                     if [ -f autogen.sh ]; then
                         chmod +x autogen.sh
-                        eval "set -- $REQUIRED_CONFIGURE_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
+                        eval "set -- $CONFIGURE_REQUIRED_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
                         echo_run ./autogen.sh "$@"
                     elif [ -f buildconf.sh ]; then
                         chmod +x buildconf.sh
-                        eval "set -- $REQUIRED_CONFIGURE_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
+                        eval "set -- $CONFIGURE_REQUIRED_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
                         echo_run ./buildconf.sh "$@"
                     elif [ -f bootstrap ]; then
                         chmod +x bootstrap
-                        eval "set -- $REQUIRED_CONFIGURE_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
+                        eval "set -- $CONFIGURE_REQUIRED_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
                         echo_run ./bootstrap "$@"
                     else
                         if [ -d m4 ]; then
@@ -1456,11 +1464,11 @@ build_dist() {
                 if [ -z "$autogen" ] || ! path_exists config.status; then
                     if path_exists Configure; then
                         chmod +x ./Configure
-                        eval "set -- $REQUIRED_CONFIGURE_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
+                        eval "set -- $CONFIGURE_REQUIRED_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
                         echo_run ./Configure "$@"
                     else
                         chmod +x ./configure
-                        eval "set -- $REQUIRED_CONFIGURE_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
+                        eval "set -- $CONFIGURE_REQUIRED_ARGS $(dist_args "$current_dist" autoconf) $extra_dist_args"
                         echo_run ./configure "$@"
                     fi
                 fi
@@ -1495,7 +1503,7 @@ build_dist() {
                 eval "set -- $extra_dist_args"
                 echo_eval_run "$configure_override $@"
             else
-                eval "set -- $REQUIRED_CMAKE_ARGS $(dist_args "$current_dist" cmake) $extra_dist_args -G Ninja"
+                eval "set -- $CMAKE_REQUIRED_ARGS $(dist_args "$current_dist" cmake) $extra_dist_args -G Ninja"
                 echo_run cmake .. "$@"
             fi
             dist_post_configure "$current_dist"
@@ -1524,7 +1532,7 @@ build_dist() {
                 eval "set -- $extra_dist_args"
                 echo_eval_run "$configure_override $@"
             else
-                eval "set -- $REQUIRED_CMAKE_ARGS $(dist_args "$current_dist" cmake) $extra_dist_args"
+                eval "set -- $CMAKE_REQUIRED_ARGS $(dist_args "$current_dist" cmake) $extra_dist_args"
                 echo_run cmake .. "$@"
             fi
             dist_post_configure "$current_dist"
@@ -2617,18 +2625,30 @@ build_project() {
     puts "${NL}[32mBuilding project: [1;34m$CHECKOUT[0m${NL}${NL}"
 
     target_os=${CROSS_OS:-$os}
+    target_bits=${target_bits:-$bits}
 
     dist_pre_build project
 
     mkdir -p "$BUILD_ROOT/project"
     cd "$BUILD_ROOT/project"
 
-    # FIXME: turn LTO back on when everything works
-    echo_eval_run cmake "'$CHECKOUT'" $REQUIRED_CMAKE_ARGS -DVBAM_STATIC=ON -DENABLE_LTO=OFF $PROJECT_ARGS $CMAKE_BASE_ARGS $@
+    rm -f visualboyadvance-m.exe
+
+    lto=ON
+
+    # FIXME: LTO still broken on 64 bit mingw
+    if [ "$target_os" = windows ] && [ "$target_bits" = 64 ]; then
+        lto=OFF
+    fi
+
+    echo_eval_run cmake "'$CHECKOUT'" $CMAKE_REQUIRED_ARGS -DVBAM_STATIC=ON -DENABLE_LTO=${lto} $CMAKE_ARGS $PROJECT_ARGS $@
     echo_run make -j$NUM_CPUS VERBOSE=1
 
     if [ "$target_os" = mac ]; then
         $STRIP visualboyadvance-m.app/Contents/MacOS/visualboyadvance-m
+
+        # unlock keychain for codesigning certificate
+        security -v unlock-keychain ~/Library/Keychains/login.keychain* || :
 
         codesign -s "Developer ID Application" --deep ./visualboyadvance-m.app || :
 
@@ -2637,11 +2657,38 @@ build_project() {
         rm -f $zip
         zip -9r $zip ./visualboyadvance-m.app
 
-        gpg --detach-sign -a $zip
+        rm -f $zip.asc
+        gpg --detach-sign -a $zip || :
     elif [ "$target_os" != windows ] && path_exists visualboyadvance-m; then
         $STRIP visualboyadvance-m
     elif [ "$target_os" = windows ] && path_exists visualboyadvance-m.exe; then
         $STRIP visualboyadvance-m.exe
+
+        mv visualboyadvance-m.exe visualboyadvance-m-unsigned.exe
+
+        message 'Press ENTER to use your GPG passphrase to unlock your code-signing certificate...'
+        read -r dummy
+
+        osslsigncode sign -pkcs12 ~/.codesign/windows_comodo.pkcs12 -pass "$(pass vbam-windows-codesign-cert)" \
+            -n visualboyadvance-m -i https://github.com/visualboyadvance-m/visualboyadvance-m \
+            -in visualboyadvance-m-unsigned.exe -out visualboyadvance-m.exe || cp visualboyadvance-m-unsigned.exe visualboyadvance-m.exe
+
+        zip=./visualboyadvance-m-Win-${target_bits:-$bits}bit.zip
+
+        rm -f $zip
+        zip -9 $zip ./visualboyadvance-m.exe
+
+        rm -f translations.zip
+
+        make install DESTDIR=./destdir
+        cd destdir/usr/share/locale
+        zip -9r ../../../../translations.zip *
+        cd ../../../..
+
+        rm -f $zip.asc translations.zip.asc
+
+        gpg --detach-sign -a $zip || :
+        gpg --detach-sign -a translations.zip || :
     fi
 
     dist_post_build project
@@ -2878,7 +2925,7 @@ ln() {
 }
 
 cygpath() {
-    if sh -c 'command -v cygpath' >/dev/null; then
+    if command -v cygpath >/dev/null; then
         command cygpath "$@"
     else
         case "$1" in
@@ -2888,6 +2935,26 @@ cygpath() {
         esac
 
         echo "$@"
+    fi
+}
+
+gpg() {
+    if command -v gpg >/dev/null; then
+        command gpg "$@"
+    elif command -v gpg2 >/dev/null; then
+        command gpg2 "$@"
+    else
+        warn 'GPG not available'
+    fi
+}
+
+command() {
+    if [ -x /bin/command ]; then
+        /bin/command "$@"
+    elif [ -x /usr/bin/command ]; then
+        /usr/bin/command "$@"
+    else
+        /bin/sh -c 'command "$@"' -- "$@"
     fi
 }
 

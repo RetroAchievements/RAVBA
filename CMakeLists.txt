@@ -98,17 +98,48 @@ if(ENABLE_ASM_SCALERS)
     option(ENABLE_MMX "Enable MMX" ${MMX_DEFAULT})
 endif()
 
-option(ENABLE_LINK "Enable GBA linking functionality" ON)
+set(ENABLE_LINK_DEFAULT OFF)
+
+# msys2 does not have static sfml libs atm
+# while on mxe we use static libs
+if(WIN32 AND ((NOT (MINGW AND MSYS)) OR CMAKE_TOOLCHAIN_FILE MATCHES mxe) AND NOT CMAKE_TOOLCHAIN_FILE MATCHES vcpkg)
+    set(SFML_STATIC_LIBRARIES TRUE)
+endif()
+
+find_package(SFML 2 COMPONENTS network system)
+
+if(SFML_FOUND)
+    set(ENABLE_LINK_DEFAULT ON)
+endif()
+
+option(ENABLE_LINK "Enable GBA linking functionality" ${ENABLE_LINK_DEFAULT})
+
 option(ENABLE_LIRC "Enable LIRC support" OFF)
 
-# currently completely broken
 set(FFMPEG_DEFAULT OFF)
 
-if(WIN32 AND NOT (MINGW AND MSYS))
-    set(FFMPEG_DEFAULT OFF)
+find_package(PkgConfig)
+
+set(FFMPEG_LIBS_LIST libavcodec>=58.18.100 libavformat>=58.12.100 libswscale>=5.1.100 libavutil>=56.14.100 libswresample>=3.1.100)
+
+if(PKGCONFIG_FOUND)
+    set(FFMPEG_DEFAULT ON)
+
+    foreach(ffmpeg_lib ${FFMPEG_LIBS_LIST})
+        string(REGEX REPLACE ">=.*" "" ffmpeg_lib_name ${ffmpeg_lib})
+
+        pkg_check_modules(FFMPEG_LIB_${ffmpeg_lib_name} ${ffmpeg_lib} QUIET)
+
+        if(NOT FFMPEG_LIB_${ffmpeg_lib_name}_FOUND)
+            set(FFMPEG_DEFAULT OFF)
+            break()
+        endif()
+    endforeach()
 endif()
 
 option(ENABLE_FFMPEG "Enable ffmpeg A/V recording" ${FFMPEG_DEFAULT})
+
+option(ENABLE_ONLINEUPDATES "Enable online update checks" ON)
 
 set(LTO_DEFAULT ON)
 
@@ -248,21 +279,6 @@ if(WIN32)
     endif()
 endif()
 
-if(ENABLE_LINK)
-    # msys2 does not have static sfml libs atm
-    # while on mxe we use static libs
-    if(WIN32 AND ((NOT (MINGW AND MSYS)) OR CMAKE_TOOLCHAIN_FILE MATCHES mxe) AND NOT CMAKE_TOOLCHAIN_FILE MATCHES vcpkg)
-        set(SFML_STATIC_LIBRARIES TRUE)
-    endif()
-
-    find_package(SFML 2 COMPONENTS network system)
-
-    if(NOT SFML_FOUND)
-        message(WARNING "SFML not found, LINK will be disabled")
-        set(ENABLE_LINK NO)
-    endif()
-endif()
-
 # set the standard libraries all ports use
 set(
     VBAMCORE_LIBS
@@ -278,7 +294,7 @@ set(
 if(ENABLE_FFMPEG)
     find_package(PkgConfig REQUIRED)
 
-    pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libswscale libavutil)
+    pkg_check_modules(FFMPEG REQUIRED ${FFMPEG_LIBS_LIST})
 
     if(FFMPEG_STATIC)
         set(FFMPEG_LIBRARIES ${FFMPEG_STATIC_LIBRARIES})
@@ -291,6 +307,10 @@ if(ENABLE_FFMPEG)
         set(FFMPEG_LIBRARIES ${FFMPEG_LIBRARIES})
         set(FFMPEG_LDFLAGS   ${FFMPEG_LDFLAGS} ${FFMPEG_OTHER_LDFLAGS})
     endif()
+endif()
+
+if(NOT ENABLE_ONLINEUPDATES)
+  add_definitions(-DNO_ONLINEUPDATES)
 endif()
 
 if(NOT ENABLE_FFMPEG)
@@ -308,6 +328,8 @@ include(GNUInstallDirs)
 # C defines
 add_definitions(-DHAVE_NETINET_IN_H -DHAVE_ARPA_INET_H -DHAVE_ZLIB_H -DFINAL_VERSION -DSDL -DUSE_OPENGL -DSYSCONF_INSTALL_DIR="${CMAKE_INSTALL_FULL_SYSCONFDIR}" -DWITH_LIRC=${WITHLIRC})
 add_definitions(-DPKGDATADIR="${CMAKE_INSTALL_FULL_DATADIR}/vbam" -DPACKAGE=)
+
+add_definitions(-D__STDC_FORMAT_MACROS)
 
 if(ENABLE_LINK)
     # IPC linking code needs sem_timedwait which can be either in librt or pthreads
@@ -349,6 +371,12 @@ endif()
 # The ASM core is disabled by default because we don't know on which platform we are
 if(NOT ENABLE_ASM_CORE)
     add_definitions(-DC_CORE)
+endif()
+
+set(NLS_DEFAULT OFF)
+
+if(NOT CMAKE_TOOLCHAIN_FILE MATCHES vcpkg)
+    set(NLS_DEFAULT ON)
 endif()
 
 option(ENABLE_NLS "Enable translations" ${NLS_DEFAULT})
@@ -444,13 +472,15 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     if(X86_32 OR AMD64)
         set(MY_C_OPT_FLAGS ${MY_C_OPT_FLAGS} -mtune=generic)
     endif()
- 
+
     # common debug flags
     if(CMAKE_COMPILER_IS_GNUCXX)
         set(MY_C_DBG_FLAGS -ggdb3 -Og -fno-omit-frame-pointer)
     else()
         set(MY_C_DBG_FLAGS -g -fno-omit-frame-pointer)
     endif()
+
+    include(CheckCXXCompilerFlag)
 
     if(ENABLE_ASAN)
         string(TOLOWER ${CMAKE_BUILD_TYPE} build)
@@ -462,7 +492,13 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
         if(SANITIZER STREQUAL "on" OR SANITIZER STREQUAL "true")
             set(SANITIZER address)
         endif()
-        set(MY_C_DBG_FLAGS ${MY_C_DBG_FLAGS} -fsanitize=${SANITIZER} -lasan)
+        set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} "-lasan")
+        check_cxx_compiler_flag("-fsanitize=${SANITIZER} -lasan" ASAN_SUPPORT_FLAG)
+        if(${ASAN_SUPPORT_FLAG})
+            set(MY_C_DBG_FLAGS ${MY_C_DBG_FLAGS} -fsanitize=${SANITIZER} -lasan)
+        else()
+            message(FATAL_ERROR "asan not available to compiler.")
+        endif()
     endif()
 
     # common flags
@@ -471,8 +507,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     if(NOT (WIN32 OR X86_32)) # inline asm is not allowed with -fPIC
         set(MY_C_FLAGS ${MY_C_FLAGS} -fPIC)
     endif()
-
-    include(CheckCXXCompilerFlag)
 
     # check if ssp flags are supported for this version of gcc
     if(CMAKE_COMPILER_IS_GNUCXX)
@@ -534,6 +568,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
         add_compile_options(${C_COMPILE_FLAG})
     endforeach()
 
+    include(CheckCXXCompilerFlag)
+
     set(MY_CXX_FLAGS -std=gnu++11 -fexceptions)
 
     foreach(ARG ${MY_CXX_FLAGS})
@@ -587,6 +623,12 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
 
     set(CMAKE_C_LINK_EXECUTABLE   "${CMAKE_C_LINK_EXECUTABLE}   ${MY_C_LINKER_FLAGS_STR}")
     set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} ${MY_C_LINKER_FLAGS_STR}")
+elseif(MSVC)
+    if(CMAKE_BUILD_TYPE STREQUAL Debug)
+        add_compile_options(/W4)
+    else()
+        add_compile_options(/W0)
+    endif()
 endif()
 
 # Assembler flags
@@ -619,7 +661,7 @@ set(
 )
 
 if(MSVC)
-	set(SRC_MAIN ${SRC_MAIN} "dependencies/msvc/getopt.c")
+        set(SRC_MAIN ${SRC_MAIN} "dependencies/msvc/getopt.c")
 endif()
 
 set(
@@ -637,7 +679,7 @@ set(
 )
 
 if(MSVC)
-	set(HDR_MAIN ${HDR_MAIN} "dependencies/msvc/getopt.h")
+        set(HDR_MAIN ${HDR_MAIN} "dependencies/msvc/getopt.h")
 endif()
 
 if(ENABLE_FFMPEG)
@@ -653,7 +695,6 @@ set(
     SRC_GBA
     src/gba/agbprint.cpp
     src/gba/bios.cpp
-    src/gba/BreakpointStructures.cpp
     src/gba/Cheats.cpp
     src/gba/CheatSearch.cpp
     src/gba/debugger-expr-lex.cpp
@@ -679,6 +720,12 @@ set(
     src/gba/Sound.cpp
     src/gba/Sram.cpp
 )
+
+if(ENABLE_DEBUGGER)
+    list(APPEND SRC_GBA
+        src/gba/BreakpointStructures.cpp
+    )
+endif()
 
 set(
     HDR_GBA
@@ -791,8 +838,9 @@ set(
     src/filters/hq2x.h
     src/filters/interp.h
     src/filters/lq2x.h
-    src/filters/xBRZ/config.h
+    src/filters/xBRZ/xbrz_config.h
     src/filters/xBRZ/xbrz.h
+    src/filters/xBRZ/xbrz_tools.h
 )
 
 set(
@@ -828,17 +876,28 @@ else()
     add_definitions(-DNO_ASM)
 endif()
 
+
+set(
+    SRC_DEBUGGER
+    src/gba/armdis.cpp
+    src/gba/elf.cpp
+)
+
+set(
+    HDR_DEBUGGER
+    src/gba/armdis.h
+    src/gba/elf.h
+)
+
 if(ENABLE_DEBUGGER)
     set(
         SRC_DEBUGGER
-        src/gba/armdis.cpp
-        src/gba/elf.cpp
+        ${SRC_DEBUGGER}
         src/gba/remote.cpp
     )
     set(
         HDR_DEBUGGER
-        src/gba/armdis.h
-        src/gba/elf.h
+        ${HDR_DEBUGGER}
         src/gba/remote.h
     )
 endif()

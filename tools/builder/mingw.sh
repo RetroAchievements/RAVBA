@@ -41,7 +41,7 @@ export BUILD_ENV
 
 if [ ! -L "$BUILD_ROOT/root" ]; then
     mv "$BUILD_ROOT/root" "$BUILD_ROOT/target"
-    mkdir "$BUILD_ROOT/host"
+    mkdir -p "$BUILD_ROOT/host"
     ln -sf "$BUILD_ROOT/target" "$BUILD_ROOT/root"
     cp -a "$BUILD_ROOT/target/"* "$BUILD_ROOT/host"
 
@@ -51,7 +51,7 @@ if [ ! -L "$BUILD_ROOT/root" ]; then
         ln -s "$BUILD_ROOT/target/$d" "$BUILD_ROOT/host/$d"
     done
 
-    mkdir "$BUILD_ROOT/host/bin" "$BUILD_ROOT/target/bin"
+    mkdir -p "$BUILD_ROOT/host/bin" "$BUILD_ROOT/target/bin"
 fi
 
 ln -sf "$BUILD_ROOT/target" "$BUILD_ROOT/root"
@@ -59,8 +59,17 @@ ln -sf "$BUILD_ROOT/target" "$BUILD_ROOT/root"
 perl_dists="$perl_dists XML-NamespaceSupport XML-SAX-Base XML-SAX"
 perl_dists=$(list_remove_duplicates $perl_dists)
 
+# to codesign windows binary
+table_insert_after DISTS pkgconfig '
+    osslsigncode    https://github.com/mtrojnar/osslsigncode/archive/18810b7e0bb1d8e0d25b6c2565a065cf66bce5d7.tar.gz    bin/osslsigncode
+'
+
+table_line_append DIST_CONFIGURE_OVERRIDES osslsigncode 'sh autogen.sh && ./configure --prefix=/usr'
+
+table_line_append DIST_EXTRA_LIBS osslsigncode '-lz -lssl -lcrypto -ldl'
+
 host_dists="$host_dists autoconf autoconf-archive automake m4 gsed bison \
-                        flex-2.6.3 flex c2man docbook2x ccache"
+                        flex-2.6.3 flex c2man docbook2x ccache ninja curl osslsigncode"
 host_dists=$(list_remove_duplicates $host_dists)
 
 both_dists="$both_dists openssl zlib bzip2 libiconv"
@@ -106,11 +115,11 @@ export UUID_LIBS="$HOST_UUID_LIBS"
 export STRIP="$HOST_STRIP"
 export PATH="$BUILD_ROOT/host/bin:\$PATH"
 
-OREQUIRED_CONFIGURE_ARGS="\$REQUIRED_CONFIGURE_ARGS"
-OREQUIRED_CMAKE_ARGS="\$REQUIRED_CMAKE_ARGS"
+OCONFIGURE_REQUIRED_ARGS="\$CONFIGURE_REQUIRED_ARGS"
+OCMAKE_REQUIRED_ARGS="\$CMAKE_REQUIRED_ARGS"
 
-REQUIRED_CONFIGURE_ARGS="\$(puts "\$REQUIRED_CONFIGURE_ARGS" | sed 's/--host[^ ]*//g')"
-REQUIRED_CMAKE_ARGS="\$(puts "\$REQUIRED_CMAKE_ARGS" | sed 's/-DCMAKE_TOOLCHAIN_FILE=[^ ]*//g')"
+CONFIGURE_REQUIRED_ARGS="\$(puts "\$CONFIGURE_REQUIRED_ARGS" | sed 's/--host[^ ]*//g')"
+CMAKE_REQUIRED_ARGS="\$(puts "\$CMAKE_REQUIRED_ARGS" | sed 's/-DCMAKE_TOOLCHAIN_FILE=[^ ]*//g')"
 EOF
     fi
 
@@ -151,9 +160,9 @@ export STRIP="\$OSTRIP"
 export PATH="\$OPATH"
 OCC= OCXX= OCPPFLAGS= OCFLAGS= OCXXFLAGS= OOBJCXXFLAGS= OLDFLAGS= OLIBS= OUUID_LIBS= OSTRIP= OPATH=
 
-REQUIRED_CONFIGURE_ARGS="\$OREQUIRED_CONFIGURE_ARGS"
-REQUIRED_CMAKE_ARGS="\$OREQUIRED_CMAKE_ARGS"
-OREQUIRED_CONFIGURE_ARGS= OREQUIRED_CMAKE_ARGS=
+CONFIGURE_REQUIRED_ARGS="\$OCONFIGURE_REQUIRED_ARGS"
+CMAKE_REQUIRED_ARGS="\$OCMAKE_REQUIRED_ARGS"
+OCONFIGURE_REQUIRED_ARGS= OCMAKE_REQUIRED_ARGS=
 
 $BUILD_ENV
 EOF
@@ -200,7 +209,7 @@ for dist in $both_dists; do
     table_line_replace DIST_POST_BUILD $dist "eval \"\$(target_env)\"; $(table_line DIST_POST_BUILD $dist)"
 done
 
-remove_dists='graphviz python2 python3 swig libxml2-python doxygen bakefile setuptools pip meson XML-Parser intltool ninja libsecret shared-mime-info'
+remove_dists='graphviz python2 python3 meson swig libxml2-python doxygen bakefile setuptools pip XML-Parser intltool libsecret shared-mime-info'
 
 for dist in $remove_dists; do
     if ! list_contains $dist $do_not_remove_dists; then
@@ -312,7 +321,7 @@ table_insert_before DISTS sfml '
 
 table_line_append DIST_ARGS openal '-DLIBTYPE=STATIC -DALSOFT_UTILS=OFF -DALSOFT_EXAMPLES=OFF -DALSOFT_TESTS=OFF'
 
-table_line_replace DIST_ARGS mp3lame "LDFLAGS='\$LDFLAGS \$BUILD_ROOT/root/lib/libcatgets.a'"
+table_line_append DIST_PATCHES mp3lame "https://raw.githubusercontent.com/msys2/MINGW-packages/master/mingw-w64-lame/0007-revert-posix-code.patch"
 
 table_line_append DIST_POST_BUILD libgsm ":; \
     rm -f \$BUILD_ROOT/root/lib/libgsm.dll.a \$BUILD_ROOT/root/bin/libgsm.dll; \
@@ -333,20 +342,21 @@ table_line_replace DIST_CONFIGURE_TYPES xvidcore autoreconf
 
 table_line_append DIST_ARGS libsoxr '-DWITH_OPENMP=NO'
 
-table_line_append DIST_ARGS ffmpeg "--extra-ldflags='-Wl,-allow-multiple-definition' --extra-libs='-lwsock32 -lws2_32 -liphlpapi -lfreetype'"
+table_line_append DIST_CONFIGURE_OVERRIDES ffmpeg "--extra-ldflags='-Wl,-allow-multiple-definition' --extra-libs='-lwsock32 -lws2_32 -liphlpapi -lfreetype'"
 
 table_line_append DIST_ARGS gettext "--enable-threads=windows"
 
 table_line_append DIST_ARGS glib "--with-threads=posix --disable-libelf"
 
 table_line_append  DIST_PATCHES glib "\
-    https://raw.githubusercontent.com/Alexpux/MINGW-packages/master/mingw-w64-glib2/0001-Use-CreateFile-on-Win32-to-make-sure-g_unlink-always.patch \
+    https://raw.githubusercontent.com/msys2/MINGW-packages/master/mingw-w64-glib2/0001-Update-g_fopen-g_open-and-g_creat-to-open-with-FILE_.patch \
     https://raw.githubusercontent.com/Alexpux/MINGW-packages/master/mingw-w64-glib2/0001-win32-Make-the-static-build-work-with-MinGW-when-pos.patch \
+    https://raw.githubusercontent.com/msys2/MINGW-packages/master/mingw-w64-glib2/0001-disable-some-tests-when-static.patch \
     https://gist.githubusercontent.com/rkitover/2edaf9583fb3068bb14016571e6f7d01/raw/ece80116d5618f372464f02392a9bcab670ce6c1/glib-mingw-no-strerror_s.patch \
 "
 
 table_line_append DIST_PATCHES graphite2 "\
-    https://raw.githubusercontent.com/Alexpux/MINGW-packages/master/mingw-w64-graphite2/001-graphite2-1.3.8-win64.patch \
+    https://raw.githubusercontent.com/msys2/MINGW-packages/master/mingw-w64-graphite2/001-graphite2-1.3.12-win64.patch \
 "
 
 table_line_append DIST_PATCHES libgsm "\
@@ -370,3 +380,9 @@ table_line_append DIST_POST_BUILD  wxwidgets ":; \
         mv \$BUILD_ROOT/root/include/langinfo.bak \$BUILD_ROOT/root/include/langinfo.h; \
     fi;
 "
+
+if [ "$target_bits" = 32 ]; then
+    table_line_append DIST_EXTRA_CFLAGS libvpx -mstackrealign
+else
+    table_line_append DIST_EXTRA_CFLAGS libvpx -fno-asynchronous-unwind-tables
+fi

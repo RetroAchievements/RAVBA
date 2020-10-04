@@ -38,7 +38,6 @@ extern "C" {
 #else // _WIN32
 #include <direct.h>
 #define GETCWD _getcwd
-#define snprintf sprintf
 #define stat _stat
 #define mkdir(X,Y) (_mkdir(X))
 // from: https://www.linuxquestions.org/questions/programming-9/porting-to-win32-429334/
@@ -268,9 +267,11 @@ IFBFilterFunc ifbFunction = 0;
 int	patchNum = 0;
 char *patchNames[PATCH_MAX_NUM] = { NULL }; // and so on
 
+#ifndef NO_DEBUGGER
 void(*dbgMain)() = remoteStubMain;
 void(*dbgSignal)(int, int) = remoteStubSignal;
 void(*dbgOutput)(const char *, uint32_t) = debuggerOutput;
+#endif
 
 char* homeDir = NULL;
 char* arg0 = NULL;
@@ -897,6 +898,7 @@ int ReadOpts(int argc, char ** argv)
 			preferences = NULL;
 			OpenPreferences(optarg);
 			fclose(f);
+			LoadConfig();
 		}
 		break;
 		case 'd':
@@ -919,6 +921,7 @@ int ReadOpts(int argc, char ** argv)
 				patchNum++;
 			}
 			break;
+#ifndef NO_DEBUGGER
 		case 'G':
 			dbgMain = remoteStubMain;
 			dbgSignal = remoteStubSignal;
@@ -947,6 +950,7 @@ int ReadOpts(int argc, char ** argv)
 				remoteSetProtocol(0);
 			}
 			break;
+#endif
 		case 'N':
 			parseDebug = false;
 			break;
