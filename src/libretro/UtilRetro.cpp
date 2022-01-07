@@ -43,14 +43,6 @@ bool cpuIsMultiBoot      = false;
 const char* loadDotCodeFile;
 const char* saveDotCodeFile;
 
-extern int systemColorDepth;
-extern int systemRedShift;
-extern int systemGreenShift;
-extern int systemBlueShift;
-
-extern uint16_t systemColorMap16[0x10000];
-extern uint32_t systemColorMap32[0x10000];
-
 bool utilWritePNGFile(const char* fileName, int w, int h, uint8_t* pix)
 {
     return false;
@@ -158,7 +150,7 @@ uint8_t *utilLoad(const char *file, bool (*accept)(const char *), uint8_t *data,
         }
     }
 
-    if (fread(image, 1, size, fp) != size) {
+    if (fread(image, 1, size, fp) != (size_t)size) {
         log("Failed to read from %s", file);
         fclose(fp);
         return NULL;
@@ -232,18 +224,26 @@ void utilUpdateSystemColorMaps(bool lcd)
 {
     int i = 0;
 
-    (void)lcd;
-
     switch (systemColorDepth) {
-    case 16:
-        for (i = 0; i < 0x10000; i++)
-            systemColorMap16[i] = ((i & 0x1f) << systemRedShift) | (((i & 0x3e0) >> 5) << systemGreenShift) | (((i & 0x7c00) >> 10) << systemBlueShift);
-        break;
-    case 24:
-    case 32:
-        for (i = 0; i < 0x10000; i++)
-            systemColorMap32[i] = ((i & 0x1f) << systemRedShift) | (((i & 0x3e0) >> 5) << systemGreenShift) | (((i & 0x7c00) >> 10) << systemBlueShift);
-        break;
+        case 16:
+            for (i = 0; i < 0x10000; i++) {
+                systemColorMap16[i] = ((i & 0x1f) << systemRedShift) |
+                    (((i & 0x3e0) >> 5) << systemGreenShift) |
+                    (((i & 0x7c00) >> 10) << systemBlueShift);
+                }
+                if (lcd)
+                    gbafilter_pal(systemColorMap16, 0x10000);
+            break;
+        case 24:
+        case 32:
+            for (i = 0; i < 0x10000; i++) {
+                systemColorMap32[i] = ((i & 0x1f) << systemRedShift) |
+                    (((i & 0x3e0) >> 5) << systemGreenShift) |
+                    (((i & 0x7c00) >> 10) << systemBlueShift);
+                }
+                if (lcd)
+                    gbafilter_pal32(systemColorMap32, 0x10000);
+            break;
     }
 }
 

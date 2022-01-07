@@ -162,8 +162,13 @@ extern void cpuEnableProfiling(int hz);
 
 const char* GetLoadDotCodeFile();
 const char* GetSaveDotCodeFile();
+void ResetLoadDotCodeFile();
 void SetLoadDotCodeFile(const char* szFile);
+void ResetSaveDotCodeFile();
 void SetSaveDotCodeFile(const char* szFile);
+
+// Updates romSize and realloc rom pointer if needed after soft-patching
+void gbaUpdateRomSize(int size);
 
 extern struct EmulatedSystem GBASystem;
 

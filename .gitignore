@@ -1,22 +1,13 @@
-src/wx/builtin-over.h
-src/wx/builtin-xrc.h
-src/wx/cmd-evtable.h
-src/wx/cmdhandlers.h
-src/wx/cmdtab.cpp
-src/wx/wxvbam.xrs
-src/wx/RA_BuildVer.h
-build/*
-build32/*
-vsbuild/*
-cmake-build*
-dependencies/*
-vcpkg/*
 .vs/*
 .idea
 *.o
 *.so
 *.dll
 *.exe
+.vscode
+vsbuild
+
+RA_BuildVer.h
 
 # vim swap files
 *.sw?

@@ -1,13 +1,13 @@
 #!/bin/sh
 
 CMAKE=cmake
+ENABLE_OPENAL=1
+ENABLE_FFMPEG=1
 
 main() {
     cd "$(dirname $0)"
 
     check_command_line_args "$@"
-
-    target=$1
 
     mktmp
 
@@ -25,7 +25,16 @@ check_command_line_args() {
                 usage
                 quit 0
                 ;;
+            --no-openal)
+                ENABLE_OPENAL=
+                shift
+                ;;
+            --no-ffmpeg)
+                ENABLE_FFMPEG=
+                shift
+                ;;
             *)
+                target=$1
                 break
                 ;;
         esac
@@ -91,13 +100,16 @@ or the other. You can specify a cross target of [1;35mm32[0m or
 MSYS2 POSIX layer builds are not supported.
 
   [1m-h, --help, --usage[0m                Show this help screen and exit.
+  [1m--no-openal[0m                        Do not install OpenAL dependencies.
+  [1m--no-ffmpeg[0m                        Do not install ffmpeg dependencies.
 
 Examples:
   [32m./installdeps[0m                        # install dependencies for a host build
   [32m./installdeps [1;35mm32[0m                    # make a 32 bit binary for the host OS
   [32m./installdeps [1;35mwin32[0m                  # cross-compile for 32 bit windows (Debian/Ubuntu, Arch Linux or MSYS2)
   [32m./installdeps [1;35mMinGW-w64-i686[0m         # likewise
-  [32m./installdeps [1;35mMinGW-w64-x86_64[0m       # cross-compile for 64 bit windows (Debian/Ubuntu, Arch Linux or MSYS2)
+  [32m./installdeps [1;35mwin64[0m                  # cross-compile for 64 bit windows (Debian/Ubuntu, Arch Linux or MSYS2)
+  [32m./installdeps [1;35mMinGW-w64-x86_64[0m       # likewise
 EOF
 }
 
@@ -160,16 +172,22 @@ linux_installdeps() {
         fedora_installdeps
     elif [ -f /etc/redhat-release ] || [ -f /etc/centos-release ]; then
         rhel_installdeps
-    elif [ -f /etc/arch-release ]; then
-        archlinux_installdeps
     elif [ -f /etc/solus-release ]; then
         solus_installdeps
     elif [ -f /etc/gentoo-release ]; then
         gentoo_installdeps
+    elif [ -x /usr/bin/pacman ]; then
+        archlinux_installdeps
     elif [ -f /etc/os-release ]; then
-        case "$(. /etc/os-release; echo "$ID_LIKE")" in
+        case "$(. /etc/os-release; echo "${ID_LIKE:-$ID}")" in
             *suse*)
                 suse_installdeps
+                ;;
+            nixos)
+                nixos_installdeps
+                ;;
+            *)
+                error "Don't know how to install deps on your version of Linux"
                 ;;
         esac
     else
@@ -182,8 +200,12 @@ freebsd_installdeps() {
 
     check sudo pkg update
 
+    pkgs="llvm-devel cmake ccache nasm ffmpeg gettext-tools gettext pkgconf sdl2 sfml wx31-gtk3 iconv zip ninja"
+
+    [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs ffmpeg"
+
     # currently the wx30 and wx31 packages produce GTK errors on CURRENT (as of 04/2019)
-    check sudo pkg install -y llvm-devel cmake ccache nasm ffmpeg gettext-tools gettext png pkgconf sdl2 sfml wx31-gtk3 iconv zip ninja
+    check sudo pkg install -y $pkgs
 
     build_instructions
 }
@@ -245,7 +267,7 @@ check_cross() {
     fi
 
     case "$target" in
-        win32|mingw*)
+        win32|win64|mingw*)
             if [ -z "$arch_linux" -a -z "$msys2" -a -z "$debian" -a -z "$fedora" ]; then
                 error 'win32 cross compiling targets are only supported on Debian/Ubuntu, Fedora, Arch and MSYS2 at the moment'
             fi
@@ -254,17 +276,17 @@ check_cross() {
                 win32)
                     target='mingw-w64-i686'
                     ;;
+                win64)
+                    target='mingw-w64-x86_64'
+                    ;;
                 mingw-w64-i686)
                     ;;
                 mingw-w64-x86_64)
                     ;;
                 *)
-                    error "target must be one of 'm32', 'win32', 'MinGW-w64-i686' or 'MinGW-w64-x86_64'"
+                    error "target must be one of 'm32', 'win32', 'MinGW-w64-i686', 'win64' or 'MinGW-w64-x86_64'"
                     ;;
             esac
-
-            # get the necessary win32 headers
-            check git submodule update --remote --recursive
             ;;
         m32|-m32)
             target=m32
@@ -303,9 +325,25 @@ debian_installdeps() {
         glew_lib=$(apt-cache search libglew | grep '^libglew[0-9]' | sed 's/ - .*//')
 
         # not present in trusty
-        libswresample_dev=$(apt-cache search libswresample-dev | awk '{print $1}')
+        if [ -n "$ENABLE_FFMPEG" ]; then
+            libswresample_dev=$(apt-cache search libswresample-dev | awk '{print $1}')
+        fi
 
-        check sudo apt-get -qy install build-essential g++ nasm cmake ccache gettext zlib1g-dev libgl1-mesa-dev libavcodec-dev libavformat-dev libswscale-dev libavutil-dev $libswresample_dev libgettextpo-dev libpng-dev libsdl2-dev libsdl2-2.0 libglu1-mesa-dev libglu1-mesa libgles2-mesa-dev libsfml-dev $sfml_libs $glew_lib libopenal-dev libwxgtk3.0-dev libwxgtk3.0 libgtk2.0-dev libgtk-3-dev ccache zip
+        # in newer distros
+        wx_lib=$(apt-cache search 'libwxgtk3.0-gtk3(-[^[:space:]]+)?$' | grep -v -- -dev | sed 's/ - .*//')
+        wx_lib_dev=$(apt-cache search 'libwxgtk3.0-gtk3-dev(-[^[:space:]]+)?$' | sed 's/ - .*//')
+
+        if [ -z "$wx_lib" ] || [ -z "$wx_lib_dev" ]; then
+          wx_lib=libwxgtk3.0
+          wx_lib_dev=libwxgtk3.0-dev
+        fi
+
+        pkgs="build-essential g++ nasm cmake ccache gettext zlib1g-dev libgl1-mesa-dev libgettextpo-dev libsdl2-dev libsdl2-2.0 libglu1-mesa-dev libglu1-mesa libgles2-mesa-dev libsfml-dev $sfml_libs $glew_lib $wx_lib $wx_lib_dev libgtk2.0-dev libgtk-3-dev ccache zip ninja-build"
+
+        [ -n "$ENABLE_OPENAL" ] && pkgs="$pkgs libopenal-dev"
+        [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs libavcodec-dev libavformat-dev libswscale-dev libavutil-dev $libswresample_dev"
+
+        check sudo apt-get -qy install $pkgs
     else
         case "$target" in
             mingw-w64-i686)
@@ -321,7 +359,24 @@ debian_installdeps() {
                 ;;
         esac
 
-        debian_rel=trusty
+        pre_build='export PATH="$PATH:/usr/lib/mxe/usr/bin"'
+
+        debian_rel=$(lsb_release -a 2>/dev/null | sed -En 's/^Codename:[[:space:]]*//p')
+
+        case "$debian_rel" in
+            bionic|stretch|trusty|xenial)
+                ;;
+            yakkety|zesty|artful)
+                debian_rel=xenial
+                ;;
+            utopic|vivid|wily)
+                debian_rel=trusty
+                ;;
+            *)
+                debian_rel=bionic
+                ;;
+        esac
+
         mxe_apt_sources=/etc/apt/sources.list.d/mxeapt.list
 
         sudo apt-get -qq -y update
@@ -335,13 +390,29 @@ debian_installdeps() {
             fi
         fi
 
+        deps="gcc zlib ffmpeg gettext sdl2 sfml openal wxwidgets"
+        [ -n "$ENABLE_OPENAL" ] && deps="$deps openal"
+        [ -n "$ENABLE_FFMPEG" ] && deps="$deps ffmpeg"
+
         set --
-        for dep in gcc zlib ffmpeg gettext sdl2 sfml openal wxwidgets; do
+        for dep in $deps; do
             set -- "$@" "mxe-${target}-$dep"
         done
         check sudo apt-get --allow-unauthenticated -qq -y update
-        # native wx-common needed for wxrc executable
-        check sudo apt-get --allow-unauthenticated -qy install build-essential cmake ccache wx-common "$@"
+
+        # Native wx-common needed for wxrc executable.
+        check sudo apt-get --allow-unauthenticated -qy install build-essential cmake ninja-build ccache wx-common git "$@"
+
+        # The ccache symlink is broken in some versions of these mxe packages.
+        ccache_link=/usr/lib/mxe/.ccache/bin/ccache
+
+        if [ ! -e "$ccache_link" ]; then
+            sudo mkdir -p ${ccache_link%/*}
+            sudo ln -sf /usr/bin/ccache "$ccache_link"
+        fi
+
+        # get the necessary win32 headers
+        git submodule update --init --remote --recursive
     fi
 
     build_instructions
@@ -350,7 +421,6 @@ debian_installdeps() {
 fedora_installdeps() {
     fedora=1
     ffmpeg=ffmpeg-devel
-    no_ffmpeg=
     rpms_installed=
 
     check_cross
@@ -358,41 +428,43 @@ fedora_installdeps() {
 
     warning=
 
-    # using --nogpgcheck with dnf because keys can be a problem on rawhide
+    if [ -n "$ENABLE_FFMPEG" ]; then
+        # using --nogpgcheck with dnf because keys can be a problem on rawhide
 
-    fedora_release=$(rpm -E %fedora)
-    tries=3
-    curdir=$(pwd)
+        fedora_release=$(rpm -E %fedora)
+        tries=3
+        curdir=$(pwd)
 
-    # make sure rpmfusion is installed for ffmpeg
-    while [ $tries -gt 0 ]; do
-        mkdir -p "${tmp}/fusion"
-        cd "${tmp}/fusion"
-        if ! curl -fLO https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-${fedora_release}.noarch.rpm; then
-            fedora_release=$((fedora_release - 1))
-            tries=$((tries - 1))
-            continue
-        fi
-        if ! curl -fLO https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${fedora_release}.noarch.rpm; then
-            tries=0
+        # make sure rpmfusion is installed for ffmpeg
+        while [ $tries -gt 0 ]; do
+            mkdir -p "${tmp}/fusion"
+            cd "${tmp}/fusion"
+            if ! curl -fLO https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-${fedora_release}.noarch.rpm; then
+                fedora_release=$((fedora_release - 1))
+                tries=$((tries - 1))
+                continue
+            fi
+            if ! curl -fLO https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${fedora_release}.noarch.rpm; then
+                tries=0
+                break
+            fi
+            # check if already installed
+            if rpm -q rpmfusion-free-release-${fedora_release} >/dev/null 2>&1 && rpm -q rpmfusion-nonfree-release-${fedora_release} >/dev/null 2>&1; then
+                info_msg 'rpmfusion already installed, good'
+                break
+            fi
+            # otherwise try to install
+            if ! sudo rpm --nodeps -Uvh ./rpmfusion-*.rpm; then
+                tries=0
+                break
+            fi
             break
+        done
+        cd "$curdir"
+        if [ $tries -eq 0 ]; then
+            warning 'installing rpmfusion repos failed, continuing without ffmpeg'
+            no_ffmpeg=1
         fi
-        # check if already installed
-        if rpm -q rpmfusion-free-release-${fedora_release} >/dev/null 2>&1 && rpm -q rpmfusion-nonfree-release-${fedora_release} >/dev/null 2>&1; then
-            info_msg 'rpmfusion already installed, good'
-            break
-        fi
-        # otherwise try to install
-        if ! sudo rpm --nodeps -Uvh ./rpmfusion-*.rpm; then
-            tries=0
-            break
-        fi
-        break
-    done
-    cd "$curdir"
-    if [ $tries -eq 0 ]; then
-        warning 'installing rpmfusion repos failed, continuing without ffmpeg'
-        no_ffmpeg=1
     fi
 
     # non-multiarch packages first
@@ -416,10 +488,13 @@ fedora_installdeps() {
             # this is sometimes necessary for rawhide
             set -- --exclude='glibc32*'
         fi
-        for pkg in zlib-devel mesa-libGL-devel ffmpeg-devel gettext-devel libpng-devel SDL2-devel SFML-devel openal-soft-devel wxGTK3-devel gtk3-devel; do
+        for pkg in zlib-devel mesa-libGL-devel ffmpeg-devel gettext-devel SDL2-devel SFML-devel openal-soft-devel wxGTK3-devel gtk3-devel; do
             case $pkg in
                 *ffmpeg*)
-                    [ -n "$no_ffmpeg" ] && continue
+                    [ -z "$ENABLE_FFMPEG" ] && continue
+                    ;;
+                *openal*)
+                    [ -z "$ENABLE_OPENAL" ] && continue
                     ;;
             esac
 
@@ -490,31 +565,36 @@ fedora_installdeps() {
         case "$target" in
             mingw-w64-i686)
                 target=mingw32
-                cmake_flags="$cmake_flags -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-cross-MinGW-w64-i686.cmake"
+                cmake_flags="$cmake_flags -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-cross-MinGW-w64-i686-static.cmake"
                 ;;
             mingw-w64-x86_64)
                 target=mingw64
-                cmake_flags="$cmake_flags -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-cross-MinGW-w64-x86_64.cmake"
+                cmake_flags="$cmake_flags -DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchain-cross-MinGW-w64-x86_64-static.cmake"
                 ;;
             *)
                 error 'unknown cross target (this should not happen)'
                 ;;
         esac
         # install static deps
-        for pkg in zlib gettext libpng SDL2 wxWidgets; do
+        for pkg in zlib gettext SDL2 wxWidgets3; do
             set -- "$@" "${target}-${pkg}-static"
         done
         # install deps that are not available as static
-        for pkg in openal-soft; do
-            set -- "$@" "${target}-${pkg}"
-        done
+        if [ -n "$ENABLE_OPENAL" ]; then
+            for pkg in openal-soft; do
+                set -- "$@" "${target}-${pkg}"
+            done
+        fi
+
+        # get the necessary win32 headers
+        git submodule update --init --remote --recursive
 
         warning='SFML is required for LINK support, Fedora does not currently have a MinGW SFML package, if you want LINK support you will need to install it manually'
     fi
 
     [ -z "$rpms_installed" ] && check sudo dnf -y --nogpgcheck --best --allowerasing install "$@"
 
-    if ! rpm -q $ffmpeg >/dev/null 2>&1; then
+    if [ -n "$ENABLE_FFMPEG" ] && ! rpm -q $ffmpeg >/dev/null 2>&1; then
         warning 'ffmpeg failed to install (probably due to conflicts)'
     fi
 
@@ -526,7 +606,6 @@ fedora_installdeps() {
 rhel_installdeps() {
     rhel=1
     ffmpeg=ffmpeg-devel
-    no_ffmpeg=
     rpms_installed=
 
     check_cross
@@ -542,34 +621,35 @@ rhel_installdeps() {
     check sudo yum -y install epel-release
 
     # make sure rpmfusion is installed for ffmpeg
-    while [ $tries -gt 0 ]; do
-        mkdir -p "${tmp}/fusion"
-        cd "${tmp}/fusion"
-        if ! curl -fLO https://download1.rpmfusion.org/free/el/rpmfusion-free-release-${rhel_release}.noarch.rpm; then
-            rhel_release=$((rhel_release - 1))
-            tries=$((tries - 1))
-            continue
-        fi
-        if ! curl -fLO https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-${rhel_release}.noarch.rpm; then
-            tries=0
+    if [ -n "$ENABLE_FFMPEG" ]; then
+        while [ $tries -gt 0 ]; do
+            mkdir -p "${tmp}/fusion"
+            cd "${tmp}/fusion"
+            if ! curl -fLO https://download1.rpmfusion.org/free/el/rpmfusion-free-release-${rhel_release}.noarch.rpm; then
+                rhel_release=$((rhel_release - 1))
+                tries=$((tries - 1))
+                continue
+            fi
+            if ! curl -fLO https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-${rhel_release}.noarch.rpm; then
+                tries=0
+                break
+            fi
+            # check if already installed
+            if rpm -q rpmfusion-free-release-${rhel_release} >/dev/null 2>&1 && rpm -q rpmfusion-nonfree-release-${rhel_release} >/dev/null 2>&1; then
+                info_msg 'rpmfusion already installed, good'
+                break
+            fi
+            # otherwise try to install
+            if ! sudo rpm --nodeps -Uvh ./rpmfusion-*.rpm; then
+                tries=0
+                break
+            fi
             break
+        done
+        cd "$curdir"
+        if [ $tries -eq 0 ]; then
+            warning 'installing rpmfusion repos failed, continuing without ffmpeg'
         fi
-        # check if already installed
-        if rpm -q rpmfusion-free-release-${rhel_release} >/dev/null 2>&1 && rpm -q rpmfusion-nonfree-release-${rhel_release} >/dev/null 2>&1; then
-            info_msg 'rpmfusion already installed, good'
-            break
-        fi
-        # otherwise try to install
-        if ! sudo rpm --nodeps -Uvh ./rpmfusion-*.rpm; then
-            tries=0
-            break
-        fi
-        break
-    done
-    cd "$curdir"
-    if [ $tries -eq 0 ]; then
-        warning 'installing rpmfusion repos failed, continuing without ffmpeg'
-        no_ffmpeg=1
     fi
 
     # non-multiarch packages first
@@ -597,10 +677,13 @@ rhel_installdeps() {
 
         warning='RHEL does not currently have SFML packages, LINK support will be disabled'
 
-        for pkg in zlib-devel mesa-libGL-devel ffmpeg-devel gettext-devel libpng-devel SDL2-devel openal-soft-devel wxGTK3-devel gtk3-devel; do
+        for pkg in zlib-devel mesa-libGL-devel ffmpeg-devel gettext-devel SDL2-devel openal-soft-devel wxGTK3-devel gtk3-devel; do
             case $pkg in
                 *ffmpeg*)
-                    [ -n "$no_ffmpeg" ] && continue
+                    [ -z "$ENABLE_FFMPEG" ] && continue
+                    ;;
+                *openal*)
+                    [ -z "$ENABLE_OPENAL" ] && continue
                     ;;
             esac
 
@@ -682,20 +765,25 @@ rhel_installdeps() {
                 ;;
         esac
         # install static deps
-        for pkg in zlib gettext libpng SDL2 wxWidgets; do
+        for pkg in zlib gettext SDL2 wxWidgets; do
             set -- "$@" "${target}-${pkg}-static"
         done
         # install deps that are not available as static
-        for pkg in openal-soft; do
-            set -- "$@" "${target}-${pkg}"
-        done
+        if [ -n "$ENABLE_OPENAL" ]; then
+            for pkg in openal-soft; do
+                set -- "$@" "${target}-${pkg}"
+            done
+        fi
+
+        # get the necessary win32 headers
+        git submodule update --init --remote --recursive
 
         warning='SFML is required for LINK support, RHEL/EPEL does not currently have a MinGW SFML package, if you want LINK support you will need to install it manually'
     fi
 
     [ -z "$rpms_installed" ] && check sudo yum -y install "$@"
 
-    if ! rpm -q $ffmpeg >/dev/null 2>&1; then
+    if [ -n "$ENABLE_FFMPEG" ] && ! rpm -q $ffmpeg >/dev/null 2>&1; then
         warning 'ffmpeg failed to install (probably due to conflicts)'
     fi
 
@@ -709,13 +797,11 @@ suse_installdeps() {
     check_cross
     installing
 
-    tools="\
-make cmake ccache nasm gettext-tools pkg-config ccache zip sfml2-devel\
-" # ffmpeg-devel
+    tools="make cmake ccache nasm gettext-tools pkg-config ccache zip sfml2-devel ninja"
 
-    libs="\
-gcc gcc-c++ libpng16-devel libSDL2-devel openal-soft-devel wxWidgets-3_0-devel\
-" # ffmpeg-devel
+    libs="gcc gcc-c++ libSDL2-devel wxWidgets-3_0-devel" # ffmpeg-devel
+
+    [ -n "$ENABLE_OPENAL" ] && libs="$libs openal-soft-devel"
     # ffmpeg requires packman repos
 
     if [ "$target" = m32 ]; then
@@ -725,6 +811,18 @@ gcc gcc-c++ libpng16-devel libSDL2-devel openal-soft-devel wxWidgets-3_0-devel\
     check sudo zypper in -y $tools $libs
 
     build_instructions
+}
+
+nixos_installdeps() {
+    nixos=1
+
+    cat <<EOF
+
+[32mTo build run:[0m
+
+nix-shell --command 'mkdir build; cd build; $CMAKE .. $cmake_flags -G Ninja; ninja'
+
+EOF
 }
 
 archlinux_require_yaourt() {
@@ -765,13 +863,16 @@ archlinux_installdeps() {
 
     # common needed dev packages
     # not using the base-devel group because it can break gcc-multilib
-    check $pacman --noconfirm --needed -S binutils file grep gawk gzip libtool make patch sed util-linux nasm cmake ccache pkg-config git ccache zip
+    check $pacman --noconfirm --needed -S binutils file grep gawk gzip libtool make patch sed util-linux nasm cmake ccache pkg-config git ccache zip ninja
 
     gtk=gtk3
 
     $pacman -Q gtk3-classic >/dev/null 2>&1 && gtk=gtk3-classic
 
-    libs="zlib mesa gettext libpng sdl2 openal wxgtk3 $gtk sfml ffmpeg"
+    libs="zlib mesa gettext sdl2 wxgtk3 $gtk sfml"
+
+    [ -n "$ENABLE_OPENAL" ] && libs="$libs openal"
+    [ -n "$ENABLE_FFMPEG" ] && libs="$libs ffmpeg"
 
     if [ -z "$target" -o "$target" = m32 ]; then
         if [ -z "$target" -o -z "$amd64" ]; then
@@ -860,8 +961,12 @@ EOF
           fi
         done
 
+        deps="zlib gettext pkg-config sdl2 wxmsw"
+
+        [ -n "$ENABLE_OPENAL" ] && deps="$deps openal"
+
         # and the actual deps
-        for p in zlib gettext libpng pkg-config sdl2 openal wxmsw; do
+        for p in $deps; do
             pkg="${pkg_prefix}${p}"
             # check if already installed
             if ! $pacman -Q "$pkg" >/dev/null 2>&1; then
@@ -869,6 +974,9 @@ EOF
             fi
         done
         [ $# -gt 0 ] && check $pacman --noconfirm --needed -S "$@"
+
+        # get the necessary win32 headers
+        git submodule update --init --remote --recursive
 
         warning 'SFML is required for LINK support, the SFML package in AUR is currently broken, if you want LINK support you will need to install it manually'
     fi
@@ -884,9 +992,12 @@ solus_installdeps() {
 
     check sudo eopkg -y update-repo
     check sudo eopkg -y install -c system.devel
-    check sudo eopkg -y install git ccache
+    check sudo eopkg -y install git ccache ninja
 
-    set -- sdl2-devel openal-soft-devel wxwidgets-devel libgtk-2-devel libgtk-3-devel
+    set -- sdl2-devel wxwidgets-devel libgtk-2-devel libgtk-3-devel
+
+    [ -n "$ENABLE_OPENAL" ] && set -- "$@" openal-soft-devel
+
     if [ -n "$amd64" -a "$target" = m32 ]; then
         info_msg 'Calculating dependencies, this will take a while..'
 
@@ -949,7 +1060,20 @@ gentoo_installdeps() {
     installing
 
     check sudo emerge-webrsync
-    check sudo emerge -vuDUa gcc make cmake ccache binutils libsdl2 libsfml wxGTK zlib dev-util/pkgconfig nasm
+
+    # We want the gtk3 slot for wxWidgets.
+    wx_slot=$(equery -qC list -p -F '$slot' x11-libs/wxGTK | grep gtk3 | sort -rV | head -1)
+
+    ebuilds="\
+      sys-devel/gcc      sys-devel/make     dev-util/cmake          dev-util/ccache sys-devel/binutils \
+      media-libs/libsdl2 media-libs/libsfml x11-libs/wxGTK:$wx_slot sys-libs/zlib   dev-util/pkgconf \
+      dev-lang/nasm      dev-util/ninja"
+
+    [ -n "$ENABLE_OPENAL" ] && ebuilds="$ebuilds media-libs/openal"
+
+    [ -n "$ENABLE_FFMPEG" ] && ebuilds="$ebuilds media-video/ffmpeg"
+
+    check sudo emerge -vn $ebuilds
 
     build_instructions
 }
@@ -963,15 +1087,21 @@ windows_installdeps() {
     # update catalogs
     check pacman -Sy
 
+    pkgs="SDL2 sfml wxWidgets zlib binutils cmake crt-git extra-cmake-modules gcc gcc-libs gcc-libgfortran gdb headers-git make pkg-config tools-git windows-default-manifest libmangle-git nasm ninja"
+
+    [ -n "$ENABLE_OPENAL" ] && pkgs="$pkgs openal"
+    [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs ffmpeg"
+
     set --
-    for p in SDL2 ffmpeg openal sfml wxWidgets zlib binutils cmake crt-git extra-cmake-modules gcc gcc-libs gcc-libgfortran gdb headers-git make pkg-config tools-git windows-default-manifest libmangle-git nasm; do
+    for p in $pkgs; do
         set -- "$@" "${target}-${p}"
     done
 
     # install
-    check pacman --noconfirm --needed -S git make zip ccache "$@"
+    check pacman --noconfirm --needed -S git make zip "$@"
 
-    cmake_flags="$cmake_flags -G 'MSYS Makefiles'"
+    # get the necessary win32 headers
+    check git submodule update --init --remote --recursive
 
     if [ "$MSYSTEM" = MSYS ]; then
         case "$target" in
@@ -1017,7 +1147,9 @@ brew_installdeps() {
 
     check brew -v update
 
-    brews="nasm cmake ccache ffmpeg gettext libpng pkg-config sdl2 wxmac ccache"
+    brews="nasm cmake ccache gettext pkg-config sdl2 wxmac ccache ninja"
+
+    [ -n "$ENABLE_FFMPEG" ] && brews="$brews ffmpeg"
 
     # sfml brew currently broken in the travis mac environment
 #    if [ -z "$TRAVIS" ]; then
@@ -1044,7 +1176,12 @@ macports_installdeps() {
     installing
 
     check sudo port -v selfupdate
-    check sudo port -v install cmake ccache nasm ffmpeg gettext libpng pkgconfig libsdl2 sfml wxWidgets-3.0 libiconv
+
+    ports="cmake ccache nasm gettext pkgconfig libsdl2 sfml wxWidgets-3.0 libiconv ninja"
+
+    [ -n "$ENABLE_FFMPEG" ] && ports="$ports ffmpeg"
+
+    check sudo port -v install $ports
     check sudo port select wxWidgets wxWidgets-3.0
 
     build_instructions
@@ -1055,7 +1192,12 @@ fink_installdeps() {
     installing
 
     check sudo fink -vy selfupdate
-    check sudo fink -vy install cmake ccache nasm ffmpeg libgettext8-dev gettext-tools libpng16 pkgconfig sdl2 wxwidgets300-osxcocoa libiconv-dev sfml24-dev ccache
+
+    pkgs="cmake ccache nasm libgettext8-dev gettext-tools pkgconfig sdl2 wxwidgets300-osxcocoa libiconv-dev sfml24-dev ccache ninja"
+
+    [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs ffmpeg"
+
+    check sudo fink -vy install $pkgs
 
     build_instructions
 }
@@ -1066,12 +1208,14 @@ build_instructions() {
 [32mDone! To build do:[0m
 
 $pre_build
-mkdir -p build && cd build
-$CMAKE .. $cmake_flags
-make $(jobs_flag)
+mkdir build && cd build
+$CMAKE .. $cmake_flags -G Ninja
+ninja
 $post_build
 
 EOF
 }
 
 main "$@"
+
+# vim:et sw=4:

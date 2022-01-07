@@ -28,10 +28,16 @@
       <object class="separator"/>
       <object class="wxMenu">
         <label>_e-Reader</label>
-        <object class="wxMenuItem" name="LoadDotCodeFile">
+        <object class="wxMenuItem" name="ResetLoadingDotCodeFile">
+          <label>_Reset Loading Dot Code</label>
+        </object>
+        <object class="wxMenuItem" name="SetLoadingDotCodeFile">
           <label>_Load Dot Code...</label>
         </object>
-        <object class="wxMenuItem" name="SaveDotCodeFile">
+        <object class="wxMenuItem" name="ResetSavingDotCodeFile">
+          <label>_Reset Saving Dot Code</label>
+        </object>
+        <object class="wxMenuItem" name="SetSavingDotCodeFile">
           <label>_Save Dot Code...</label>
         </object>
       </object>
@@ -420,6 +426,14 @@
         <object class="wxMenuItem" name="JoypadConfigure">
           <label>_Configure ...</label>
         </object>
+        <object class="wxMenuItem" name="AllowKeyboardBackgroundInput">
+          <label>Allow _keyboard background input</label>
+          <checkable>1</checkable>
+        </object>
+        <object class="wxMenuItem" name="AllowJoystickBackgroundInput">
+          <label>Allow _joystick background input</label>
+          <checkable>1</checkable>
+        </object>
         <object class="separator"/>
         <object class="wxMenu">
           <label>_Autofire</label>
@@ -502,6 +516,10 @@
           <label>_Debug print</label>
           <checkable>1</checkable>
         </object>
+        <object class="wxMenuItem" name="GBALcdFilter">
+          <label>_LCD Filter</label>
+          <checkable>1</checkable>
+        </object>
       </object>
       <object class="wxMenu">
         <label>_Game Boy</label>
@@ -509,6 +527,18 @@
           <label>Configure ...</label>
         </object>
         <object class="separator"/>
+        <object class="wxMenuItem" name="GBColorOption">
+          <label>_GB color option</label>
+          <checkable>1</checkable>
+        </object>
+        <object class="wxMenuItem" name="GBLcdFilter">
+          <label>_LCD Filter</label>
+          <checkable>1</checkable>
+        </object>
+        <object class="wxMenuItem" name="ColorizerHack">
+          <label>_GB Colorizer Hack (requires restart)</label>
+          <checkable>1</checkable>
+        </object>        
         <object class="wxMenuItem" name="Printer">
           <label>_GB printer</label>
           <checkable>1</checkable>
@@ -523,7 +553,7 @@
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="BootRomGB">
-          <label>_Use GB BIOS file</label>
+          <label>_Use GB BIOS file (requires restart)</label>
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="BootRomGBC">
@@ -542,6 +572,9 @@
         </object>
         <object class="wxMenuItem" name="Customize">
           <label>_Key Shortcuts ...</label>
+        </object>
+        <object class="wxMenuItem" name="UIConfigure">
+          <label>_UI Settings ...</label>
         </object>
     </object>
     <object class="wxMenu">
@@ -704,10 +737,10 @@
       <object class="wxMenuItem" name="UpdateRDB">
         <label>Update ROM database</label>
       </object>
+      -->
       <object class="wxMenuItem" name="UpdateEmu">
         <label>Check for updates</label>
       </object>
-      -->
       <object class="wxMenuItem" name="FactoryReset">
         <label>_Factory Reset...</label>
       </object>

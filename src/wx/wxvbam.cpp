@@ -26,7 +26,6 @@
 #include "builtin-xrc.h"
 
 // The built-in vba-over.ini
-#include "../common/ConfigManager.h"
 #include "builtin-over.h"
 
 #ifdef RETROACHIEVEMENTS
@@ -35,6 +34,19 @@
 
 IMPLEMENT_APP(wxvbamApp)
 IMPLEMENT_DYNAMIC_CLASS(MainFrame, wxFrame)
+
+#ifdef WIN32_CONSOLE_APP
+#include <windows.h>
+
+int main(int argc, char** argv)
+{
+    return WinMain(::GetModuleHandle(NULL), 0, 0, 0);
+}
+#endif
+
+#ifndef NO_ONLINEUPDATES
+#include "autoupdater/autoupdater.h"
+#endif // NO_ONLINEUPDATES
 
 // Initializer for struct cmditem
 cmditem new_cmditem(const wxString cmd, const wxString name, int cmd_id,
@@ -100,8 +112,8 @@ static void get_config_path(wxPathList& path, bool exists = true)
     }
     else
     {
-	// config is in $HOME/.vbam/
-	add_nonstandard_path(old_config);
+        // config is in $HOME/.vbam/
+        add_nonstandard_path(old_config);
     }
 #endif
 
@@ -189,17 +201,27 @@ wxString wxvbamApp::GetAbsolutePath(wxString path)
     return path;
 }
 
+#ifdef __WXMSW__
+#include <wx/msw/private.h>
+#include <windows.h>
+#endif
+
 bool wxvbamApp::OnInit()
 {
     // set up logging
 #ifndef NDEBUG
     wxLog::SetLogLevel(wxLOG_Trace);
 #endif
-    // turn off output buffering on Windows to support mintty
 #ifdef __WXMSW__
+    // in windows console mode debug builds, redirect e.g. --help to stderr
+#ifndef NDEBUG
+    wxMessageOutput::Set(new wxMessageOutputStderr());
+#endif
+    // turn off output buffering to support windows consoles
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    dup2(1, 2); // redirect stderr to stdout
+    // redirect stderr to stdout
+    dup2(1, 2);
 #endif
     using_wayland = IsItWayland();
 
@@ -221,7 +243,7 @@ bool wxvbamApp::OnInit()
         return false;
 
     if (console_mode)
-	return true;
+        return true;
 
     // prepare for loading xrc files
     wxXmlResource* xr = wxXmlResource::Get();
@@ -257,48 +279,51 @@ bool wxvbamApp::OnInit()
     }
 
     wxSetWorkingDirectory(cwd);
-// set up config file
-// this needs to be in a subdir to support other config as well
-// but subdir flag behaves differently 2.8 vs. 2.9.  Oh well.
-// NOTE: this does not support XDG (freedesktop.org) paths
-    wxString confname(wxT("vbam.ini"));
-    wxFileName vbamconf(GetConfigurationPath(), confname);
-// /MIGRATION
-// migrate from 'vbam.{cfg,conf}' to 'vbam.ini' to manage a single config
-// file for all platforms.
-    wxString oldConf(GetConfigurationPath() + wxT(FILE_SEP) + wxT("vbam.conf"));
-    wxString newConf(GetConfigurationPath() + wxT(FILE_SEP) + wxT("vbam.ini"));
 
-    if (!wxFileExists(newConf) && wxFileExists(oldConf))
-        wxRenameFile(oldConf, newConf, false);
-// /END_MIGRATION
+    if (!cfg) {
+        // set up config file
+        // this needs to be in a subdir to support other config as well
+        // but subdir flag behaves differently 2.8 vs. 2.9.  Oh well.
+        // NOTE: this does not support XDG (freedesktop.org) paths
+        wxString confname(wxT("vbam.ini"));
+        wxFileName vbamconf(GetConfigurationPath(), confname);
+        // /MIGRATION
+        // migrate from 'vbam.{cfg,conf}' to 'vbam.ini' to manage a single config
+        // file for all platforms.
+        wxString oldConf(GetConfigurationPath() + wxT(FILE_SEP) + wxT("vbam.conf"));
+        wxString newConf(GetConfigurationPath() + wxT(FILE_SEP) + wxT("vbam.ini"));
 
-    cfg = new wxFileConfig(wxT("vbam"), wxEmptyString,
-        vbamconf.GetFullPath(),
-        wxEmptyString, wxCONFIG_USE_LOCAL_FILE);
-    // set global config for e.g. Windows font mapping
-    wxFileConfig::Set(cfg);
-    // yet another bug/deficiency in wxConfig: dirs are not created if needed
-    // since a default config is always written, dirs are always needed
-    // Can't figure out statically if using wxFileConfig w/o duplicating wx's
-    // logic, so do it at run-time
-    // wxFileConfig *f = wxDynamicCast(cfg, wxFileConfig);
-    // wxConfigBase does not derive from wxObject!!! so no wxDynamicCast
-    wxFileConfig* fc = dynamic_cast<wxFileConfig*>(cfg);
+        if (!wxFileExists(newConf) && wxFileExists(oldConf))
+            wxRenameFile(oldConf, newConf, false);
+        // /END_MIGRATION
 
-    if (fc) {
-        wxFileName s(wxFileConfig::GetLocalFileName(GetAppName()));
-// at least up to 2.8.12, GetLocalFileName returns the dir if
-// SUBDIR is specified instead of actual file name
-// and SUBDIR only affects UNIX
+        cfg = new wxFileConfig(wxT("vbam"), wxEmptyString,
+            vbamconf.GetFullPath(),
+            wxEmptyString, wxCONFIG_USE_LOCAL_FILE);
+        // set global config for e.g. Windows font mapping
+        wxFileConfig::Set(cfg);
+        // yet another bug/deficiency in wxConfig: dirs are not created if needed
+        // since a default config is always written, dirs are always needed
+        // Can't figure out statically if using wxFileConfig w/o duplicating wx's
+        // logic, so do it at run-time
+        // wxFileConfig *f = wxDynamicCast(cfg, wxFileConfig);
+        // wxConfigBase does not derive from wxObject!!! so no wxDynamicCast
+        wxFileConfig* fc = dynamic_cast<wxFileConfig*>(cfg);
+
+        if (fc) {
+            wxFileName s(wxFileConfig::GetLocalFileName(GetAppName()));
+            // at least up to 2.8.12, GetLocalFileName returns the dir if
+            // SUBDIR is specified instead of actual file name
+            // and SUBDIR only affects UNIX
 #if defined(__UNIX__) && !wxCHECK_VERSION(2, 9, 0)
-        s.AppendDir(s.GetFullName());
+            s.AppendDir(s.GetFullName());
 #endif
-        // only the path part gets created
-        // note that 0777 is default (assumes umask will do og-w)
-        s.Mkdir(0777, wxPATH_MKDIR_FULL);
-        s = wxFileName::DirName(GetConfigurationPath());
-        s.Mkdir(0777, wxPATH_MKDIR_FULL);
+            // only the path part gets created
+            // note that 0777 is default (assumes umask will do og-w)
+            s.Mkdir(0777, wxPATH_MKDIR_FULL);
+            s = wxFileName::DirName(GetConfigurationPath());
+            s.Mkdir(0777, wxPATH_MKDIR_FULL);
+        }
     }
 
     load_opts();
@@ -427,7 +452,7 @@ bool wxvbamApp::OnInit()
         return false;
 
     if (x >= 0 && y >= 0 && width > 0 && height > 0)
-	frame->SetSize(x, y, width, height);
+        frame->SetSize(x, y, width, height);
 
     if (isMaximized)
         frame->Maximize();
@@ -437,9 +462,12 @@ bool wxvbamApp::OnInit()
 #endif
 
     if (isFullscreen && wxGetApp().pending_load != wxEmptyString)
-	frame->ShowFullScreen(isFullscreen);
+        frame->ShowFullScreen(isFullscreen);
     frame->Show(true);
 
+#ifndef NO_ONLINEUPDATES
+    initAutoupdater();
+#endif
     return true;
 }
 
@@ -447,12 +475,12 @@ int wxvbamApp::OnRun()
 {
     if (console_mode)
     {
-	// we could check for our own error codes here...
-	return console_status;
+        // we could check for our own error codes here...
+        return console_status;
     }
     else
     {
-	return wxApp::OnRun();
+        return wxApp::OnRun();
     }
 }
 
@@ -465,6 +493,7 @@ void wxvbamApp::CleanUp()
     wxApp::CleanUp();
 }
 
+// called on --help
 bool wxvbamApp::OnCmdLineHelp(wxCmdLineParser& parser)
 {
     wxApp::OnCmdLineHelp(parser);
@@ -499,27 +528,30 @@ void wxvbamApp::OnInitCmdLine(wxCmdLineParser& cl)
     static wxCmdLineEntryDesc opttab[] = {
         { wxCMD_LINE_OPTION, NULL, t("save-xrc"),
             N_("Save built-in XRC file and exit"),
-	    wxCMD_LINE_VAL_STRING, 0 },
+            wxCMD_LINE_VAL_STRING, 0 },
         { wxCMD_LINE_OPTION, NULL, t("save-over"),
             N_("Save built-in vba-over.ini and exit"),
-	    wxCMD_LINE_VAL_STRING, 0 },
+            wxCMD_LINE_VAL_STRING, 0 },
         { wxCMD_LINE_SWITCH, NULL, t("print-cfg-path"),
             N_("Print configuration path and exit"),
-	    wxCMD_LINE_VAL_NONE, 0 },
+            wxCMD_LINE_VAL_NONE, 0 },
         { wxCMD_LINE_SWITCH, t("f"), t("fullscreen"),
             N_("Start in full-screen mode"),
-	    wxCMD_LINE_VAL_NONE, 0 },
+            wxCMD_LINE_VAL_NONE, 0 },
+        { wxCMD_LINE_OPTION, t("c"), t("config"),
+            N_("Set a configuration file"),
+            wxCMD_LINE_VAL_STRING, 0 },
 #if !defined(NO_LINK) && !defined(__WXMSW__)
         { wxCMD_LINE_SWITCH, t("s"), t("delete-shared-state"),
             N_("Delete shared link state first, if it exists"),
-	    wxCMD_LINE_VAL_NONE, 0 },
+            wxCMD_LINE_VAL_NONE, 0 },
 #endif
         // stupid wx cmd line parser doesn't support duplicate options
-        //	{ wxCMD_LINE_OPTION, t("o"),  t("option"),
-        //		_("Set configuration option; <opt>=<value> or help for list"),
+        //    { wxCMD_LINE_OPTION, t("o"),  t("option"),
+        //        _("Set configuration option; <opt>=<value> or help for list"),
         { wxCMD_LINE_SWITCH, t("o"), t("list-options"),
             N_("List all settable options and exit"),
-	    wxCMD_LINE_VAL_NONE, 0 },
+            wxCMD_LINE_VAL_NONE, 0 },
         { wxCMD_LINE_PARAM, NULL, NULL,
             N_("ROM file"), wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL },
         { wxCMD_LINE_PARAM, NULL, NULL,
@@ -638,6 +670,17 @@ bool wxvbamApp::OnCmdLineParsed(wxCmdLineParser& cl)
         return true;
     }
 
+    if (cl.Found(wxT("c"), &s)) {
+        wxFileName vbamconf(s);
+        if (!vbamconf.FileExists()) {
+            wxLogError(_("Configuration file not found."));
+            return false;
+        }
+        cfg = new wxFileConfig(wxT("vbam"), wxEmptyString,
+            vbamconf.GetFullPath(),
+            wxEmptyString, wxCONFIG_USE_LOCAL_FILE);
+    }
+
 #if !defined(NO_LINK) && !defined(__WXMSW__)
 
     if (cl.Found(wxT("s"))) {
@@ -693,10 +736,14 @@ wxString wxvbamApp::GetDataDir()
 wxvbamApp::~wxvbamApp() {
     if (home != NULL)
     {
-	free(home);
-	home = NULL;
+        free(home);
+        home = NULL;
     }
     delete overrides;
+
+#ifndef NO_ONLINEUPDATES
+    shutdownAutoupdater();
+#endif
 }
 
 MainFrame::MainFrame()
@@ -706,6 +753,8 @@ MainFrame::MainFrame()
     , dialog_opened(0)
     , focused(false)
 {
+    jpoll = new JoystickPoller();
+    this->Connect(wxID_ANY, wxEVT_SHOW, wxShowEventHandler(JoystickPoller::ShowDialog), jpoll, jpoll);
 }
 
 MainFrame::~MainFrame()
@@ -728,20 +777,11 @@ EVT_CLOSE(MainFrame::OnClose)
 // for window geometry
 EVT_MOVE(MainFrame::OnMove)
 EVT_SIZE(MainFrame::OnSize)
-// pause game if menu pops up
-//
-// This is a feature most people don't like, and it causes problems with
-// keyboard game keys on mac, so we will disable it for now.
-//
-// On Windows, there will still be a pause because of how the windows event
-// model works, in addition the audio will loop with SDL, so we still pause on
-// Windows, TODO: this needs to be fixed properly
-//
-#ifdef __WXMSW__
+
+// For tracking menubar state.
 EVT_MENU_OPEN(MainFrame::MenuPopped)
 EVT_MENU_CLOSE(MainFrame::MenuPopped)
 EVT_MENU_HIGHLIGHT_ALL(MainFrame::MenuPopped)
-#endif
 
 END_EVENT_TABLE()
 
@@ -775,8 +815,8 @@ void MainFrame::OnMenu(wxContextMenuEvent& event)
         wxPoint p(event.GetPosition());
 #if 0 // wx actually recommends ignoring the position
 
-		if (p != wxDefaultPosition)
-			p = ScreenToClient(p);
+        if (p != wxDefaultPosition)
+            p = ScreenToClient(p);
 
 #endif
         PopupMenu(ctx_menu, p);
@@ -817,16 +857,16 @@ void MainFrame::OnSize(wxSizeEvent& event)
     bool isMaximized = IsMaximized();
     if (!isFullscreen && !isMaximized)
     {
-	if (height > 0 && width > 0)
-	{
-	    windowHeight = height;
-	    windowWidth = width;
-	}
-	if (x >= 0 && y >= 0)
-	{
-	    windowPositionX = x;
-	    windowPositionY = y;
-	}
+        if (height > 0 && width > 0)
+        {
+            windowHeight = height;
+            windowWidth = width;
+        }
+        if (x >= 0 && y >= 0)
+        {
+            windowPositionX = x;
+            windowPositionY = y;
+        }
     }
     else
     {
@@ -840,20 +880,41 @@ void MainFrame::OnSize(wxSizeEvent& event)
 
 int MainFrame::FilterEvent(wxEvent& event)
 {
-    if (event.GetEventType() == wxEVT_KEY_DOWN)
+    if (event.GetEventType() == wxEVT_KEY_DOWN && !menus_opened && !dialog_opened)
     {
         wxKeyEvent& ke = (wxKeyEvent&)event;
-        int keyCode = ke.GetKeyCode();
+        int keyCode = getKeyboardKeyCode(ke);
         int keyMod = ke.GetModifiers();
         wxAcceleratorEntry_v accels = wxGetApp().GetAccels();
         for (size_t i = 0; i < accels.size(); ++i)
-             if (keyCode == accels[i].GetKeyCode() && keyMod == accels[i].GetFlags())
-             {
-                 wxCommandEvent evh(wxEVT_COMMAND_MENU_SELECTED, accels[i].GetCommand());
-                 evh.SetEventObject(this);
-                 GetEventHandler()->ProcessEvent(evh);
-                 return true;
-	     }
+            if (keyCode == accels[i].GetKeyCode() && keyMod == accels[i].GetFlags()
+                && accels[i].GetCommand() != XRCID("NOOP"))
+            {
+                wxCommandEvent evh(wxEVT_COMMAND_MENU_SELECTED, accels[i].GetCommand());
+                evh.SetEventObject(this);
+                GetEventHandler()->ProcessEvent(evh);
+                return wxEventFilter::Event_Processed;
+        }
+    }
+    else if (event.GetEventType() == wxEVT_SDLJOY && !menus_opened && !dialog_opened)
+    {
+        wxSDLJoyEvent& je = (wxSDLJoyEvent&)event;
+        if (je.control_value() == 0) return -1; // joystick button UP
+        uint8_t key = je.control_index();
+        int mod = wxJoyKeyTextCtrl::DigitalButton(je);
+        int joy = je.player_index();
+        wxString label = wxJoyKeyTextCtrl::ToString(mod, key, joy);
+        wxAcceleratorEntry_v accels = wxGetApp().GetAccels();
+        for (size_t i = 0; i < accels.size(); ++i)
+        {
+            if (label == accels[i].GetUkey())
+            {
+                wxCommandEvent evh(wxEVT_COMMAND_MENU_SELECTED, accels[i].GetCommand());
+                evh.SetEventObject(this);
+                GetEventHandler()->ProcessEvent(evh);
+                return wxEventFilter::Event_Processed;
+            }
+        }
     }
 #ifdef RETROACHIEVEMENTS
     else if (event.GetEventType() == wxEVT_COMMAND_MENU_SELECTED)
@@ -866,7 +927,7 @@ int MainFrame::FilterEvent(wxEvent& event)
         }
     }
 #endif
-    return -1;
+    return wxEventFilter::Event_Skip;
 }
 
 void MainFrame::OnClose(wxCloseEvent& event)
@@ -898,8 +959,8 @@ wxString MainFrame::GetGamePath(wxString path)
 
     if (!wxIsWritable(game_path))
     {
-	game_path = wxGetApp().GetAbsolutePath(wxString((get_xdg_user_data_home() + DOT_DIR).c_str(), wxConvLibc));
-	wxFileName::Mkdir(game_path, 0777, wxPATH_MKDIR_FULL);
+        game_path = wxGetApp().GetAbsolutePath(wxString((get_xdg_user_data_home() + DOT_DIR).c_str(), wxConvLibc));
+        wxFileName::Mkdir(game_path, 0777, wxPATH_MKDIR_FULL);
     }
 
     return game_path;
@@ -907,29 +968,62 @@ wxString MainFrame::GetGamePath(wxString path)
 
 void MainFrame::SetJoystick()
 {
-    bool anyjoy = false;
-    joy.Remove();
+    /* Remove all attached joysticks to avoid errors while
+     * destroying and creating the GameArea `panel`. */
+    joy.StopPolling();
+
+    set_global_accels();
 
     if (!emulating)
         return;
 
-    for (int i = 0; i < 4; i++)
+    std::unordered_set<unsigned> needed_joysticks;
+    for (int i = 0; i < 4; i++) {
         for (int j = 0; j < NUM_KEYS; j++) {
             wxJoyKeyBinding_v b = gopts.joykey_bindings[i][j];
-
             for (size_t k = 0; k < b.size(); k++) {
                 int jn = b[k].joy;
-
                 if (jn) {
-                    if (!anyjoy) {
-                        anyjoy = true;
-                        joy.Attach(panel);
-                    }
-
-                    joy.Add(jn - 1);
+                    needed_joysticks.insert(jn);
                 }
             }
         }
+    }
+    joy.PollJoysticks(needed_joysticks);
+}
+
+void MainFrame::StopJoyPollTimer()
+{
+    if (jpoll && jpoll->IsRunning())
+        jpoll->Stop();
+}
+
+void MainFrame::StartJoyPollTimer()
+{
+    if (jpoll && !jpoll->IsRunning())
+        jpoll->Start();
+}
+
+bool MainFrame::IsJoyPollTimerRunning()
+{
+    return jpoll->IsRunning();
+}
+
+wxEvtHandler* MainFrame::GetJoyEventHandler()
+{
+    auto focused_window = wxWindow::FindFocus();
+
+    if (focused_window)
+        return focused_window;
+
+    auto panel = GetPanel();
+    if (!panel)
+        return nullptr;
+
+    if (allowJoystickBackgroundInput)
+        return panel->GetEventHandler();
+
+    return nullptr;
 }
 
 void MainFrame::enable_menus()
@@ -967,7 +1061,7 @@ void MainFrame::update_state_ts(bool force)
 
         if (panel->game_type() != IMAGE_UNKNOWN) {
             wxString fn;
-            fn.Printf(SAVESLOT_FMT, panel->game_name().c_str(), i + 1);
+            fn.Printf(SAVESLOT_FMT, panel->game_name().wc_str(), i + 1);
             wxFileName fp(panel->state_dir(), fn);
             wxDateTime ts; // = wxInvalidDateTime
 
@@ -1066,65 +1160,43 @@ int MainFrame::newest_state_slot()
     return ns + 1;
 }
 
-// disable emulator loop while menus are popped up
-// not sure how to match up w/ down other than counting...
-// only msw is guaranteed to only give one up & one down event for entire
-// menu browsing
-// if there is ever a mismatch, the game will freeze and there is no way
-// to detect if it's doing that
-
-// FIXME: this does not work.
-// Not all open events are followed by close events.
-// Removing the nesting counter may help, but on wxGTK I still get lockups.
 void MainFrame::MenuPopped(wxMenuEvent& evt)
 {
-    bool popped = evt.GetEventType() != wxEVT_MENU_CLOSE;
-#if 0
-
-	if (popped)
-		++menus_opened;
-	else
-		--menus_opened;
-
-	if (menus_opened < 0) // how could this ever be???
-		menus_opened = 0;
-
-#else
-
-    if (popped)
-        menus_opened = 1;
+    // We consider the menu closed when the main menubar or system menu is closed, not any submenus.
+    // On Windows nullptr is the system menu.
+    if (evt.GetEventType() == wxEVT_MENU_CLOSE && (evt.GetMenu() == nullptr || evt.GetMenu()->GetMenuBar() == GetMenuBar()))
+        SetMenusOpened(false);
     else
-        menus_opened = 0;
+        SetMenusOpened(true);
 
-#endif
-
-    // workaround for lack of wxGTK mouse motion events: unblank
-    // pointer when menu popped up
-    // of course this does not help in finding the menus in the first place
-    // the user is better off clicking in the window or entering/
-    // exiting the window (which does generate a mouse event)
-    // it will auto-hide again once game resumes
-    if (popped)
-        panel->ShowPointer();
-
-    if (menus_opened)
-        panel->Pause();
-    else if (!IsPaused())
-        panel->Resume();
+    evt.Skip();
 }
 
+// Pause game if menu pops up.
+//
+// This is a feature most people don't like, and it causes problems with
+// keyboard game keys on mac, so we will disable it for now.
+//
+// On Windows, there will still be a pause because of how the windows event
+// model works, in addition the audio will loop with SDL, so we still pause on
+// Windows.
+//
+// TODO: This needs to be fixed properly.
+//
 void MainFrame::SetMenusOpened(bool state)
 {
-    if (state) {
-        menus_opened = 1;
+    if ((menus_opened = state)) {
+#ifdef __WXMSW__
         paused       = true;
         panel->Pause();
+#endif
     }
     else {
-        menus_opened = 0;
+#ifdef __WXMSW__
         paused       = false;
         pause_next   = false;
         panel->Resume();
+#endif
     }
 }
 
@@ -1152,7 +1224,7 @@ void MainFrame::StartModal()
     // pointer when dialog popped up
     // it will auto-hide again once game resumes
     panel->ShowPointer();
-    panel->Pause();
+    //panel->Pause();
     ++dialog_opened;
 }
 

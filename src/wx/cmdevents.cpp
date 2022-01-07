@@ -10,8 +10,7 @@
 #include <wx/wfstream.h>
 #include <wx/msgdlg.h>
 
-#include "version.h"
-#include "../common/ConfigManager.h"
+#include "../common/version_cpp.h"
 #include "../gb/gbPrinter.h"
 #include "../gba/agbprint.h"
 
@@ -842,11 +841,14 @@ EVT_HANDLER_MASK(RomInformation, "ROM information...", CMDEN_GB | CMDEN_GBA)
     }
 }
 
-static wxString loaddotcodefile_path;
-static wxString savedotcodefile_path;
-
-EVT_HANDLER_MASK(LoadDotCodeFile, "Load e-Reader Dot Code...", CMDEN_GBA)
+EVT_HANDLER_MASK(ResetLoadingDotCodeFile, "Reset Loading e-Reader Dot Code", CMDEN_GBA)
 {
+    ResetLoadDotCodeFile();
+}
+
+EVT_HANDLER_MASK(SetLoadingDotCodeFile, "Load e-Reader Dot Code...", CMDEN_GBA)
+{
+    static wxString loaddotcodefile_path;
     wxFileDialog dlg(this, _("Select Dot Code file"), loaddotcodefile_path, wxEmptyString,
         _(
                          "e-Reader Dot Code (*.bin;*.raw)|"
@@ -858,11 +860,17 @@ EVT_HANDLER_MASK(LoadDotCodeFile, "Load e-Reader Dot Code...", CMDEN_GBA)
         return;
 
     loaddotcodefile_path = dlg.GetPath();
-    SetLoadDotCodeFile(loaddotcodefile_path.mb_str(wxConvUTF8));
+    SetLoadDotCodeFile(UTF8(loaddotcodefile_path));
 }
 
-EVT_HANDLER_MASK(SaveDotCodeFile, "Save e-Reader Dot Code...", CMDEN_GBA)
+EVT_HANDLER_MASK(ResetSavingDotCodeFile, "Reset Saving e-Reader Dot Code", CMDEN_GBA)
 {
+    ResetLoadDotCodeFile();
+}
+
+EVT_HANDLER_MASK(SetSavingDotCodeFile, "Save e-Reader Dot Code...", CMDEN_GBA)
+{
+    static wxString savedotcodefile_path;
     wxFileDialog dlg(this, _("Select Dot Code file"), savedotcodefile_path, wxEmptyString,
         _(
                          "e-Reader Dot Code (*.bin;*.raw)|"
@@ -874,7 +882,7 @@ EVT_HANDLER_MASK(SaveDotCodeFile, "Save e-Reader Dot Code...", CMDEN_GBA)
         return;
 
     savedotcodefile_path = dlg.GetPath();
-    SetSaveDotCodeFile(savedotcodefile_path.mb_str(wxConvUTF8));
+    SetSaveDotCodeFile(UTF8(savedotcodefile_path));
 }
 
 static wxString batimp_path;
@@ -904,10 +912,10 @@ EVT_HANDLER_MASK(ImportBatteryFile, "Import battery file...", CMDEN_GB | CMDEN_G
     if (ret == wxYES) {
         wxString msg;
 
-        if (panel->emusys->emuReadBattery(fn.mb_fn_str()))
-            msg.Printf(_("Loaded battery %s"), fn.c_str());
+        if (panel->emusys->emuReadBattery(UTF8(fn)))
+            msg.Printf(_("Loaded battery %s"), fn.wc_str());
         else
-            msg.Printf(_("Error loading battery %s"), fn.c_str());
+            msg.Printf(_("Error loading battery %s"), fn.wc_str());
 
         systemScreenMessage(msg);
     }
@@ -942,7 +950,7 @@ EVT_HANDLER_MASK(ImportGamesharkCodeFile, "Import GameShark code file...", CMDEN
             // FIXME: this routine will not work on big-endian systems
             // if the underlying file format is little-endian
             // (fix in gb/gbCheats.cpp)
-            res = gbCheatReadGSCodeFile(fn.mb_fn_str());
+            res = gbCheatReadGSCodeFile(UTF8(fn));
         else {
             // need to select game first
             wxFFile f(fn, wxT("rb"));
@@ -1024,13 +1032,13 @@ EVT_HANDLER_MASK(ImportGamesharkCodeFile, "Import GameShark code file...", CMDEN
             // FIXME: this routine will not work on big-endian systems
             // if the underlying file format is little-endian
             // (fix in gba/Cheats.cpp)
-            res = cheatsImportGSACodeFile(fn.mb_fn_str(), game, v3);
+            res = cheatsImportGSACodeFile(UTF8(fn), game, v3);
         }
 
         if (res)
-            msg.Printf(_("Loaded code file %s"), fn.c_str());
+            msg.Printf(_("Loaded code file %s"), fn.wc_str());
         else
-            msg.Printf(_("Error loading code file %s"), fn.c_str());
+            msg.Printf(_("Error loading code file %s"), fn.wc_str());
 
         systemScreenMessage(msg);
     }
@@ -1064,7 +1072,7 @@ EVT_HANDLER_MASK(ImportGamesharkActionReplaySnapshot,
         bool res;
 
         if (panel->game_type() == IMAGE_GB)
-            res = gbReadGSASnapshot(fn.mb_fn_str());
+            res = gbReadGSASnapshot(UTF8(fn));
         else {
             bool gsv = fn.size() >= 4 && wxString(fn.substr(fn.size() - 4)).IsSameAs(wxT(".gsv"), false);
 
@@ -1072,18 +1080,18 @@ EVT_HANDLER_MASK(ImportGamesharkActionReplaySnapshot,
                 // FIXME: this will fail on big-endian machines if
                 // file format is little-endian
                 // fix in GBA.cpp
-                res = CPUReadGSASPSnapshot(fn.mb_fn_str());
+                res = CPUReadGSASPSnapshot(UTF8(fn));
             else
                 // FIXME: this will fail on big-endian machines if
                 // file format is little-endian
                 // fix in GBA.cpp
-                res = CPUReadGSASnapshot(fn.mb_fn_str());
+                res = CPUReadGSASnapshot(UTF8(fn));
         }
 
         if (res)
-            msg.Printf(_("Loaded snapshot file %s"), fn.c_str());
+            msg.Printf(_("Loaded snapshot file %s"), fn.wc_str());
         else
-            msg.Printf(_("Error loading snapshot file %s"), fn.c_str());
+            msg.Printf(_("Error loading snapshot file %s"), fn.wc_str());
 
         systemScreenMessage(msg);
     }
@@ -1105,10 +1113,10 @@ EVT_HANDLER_MASK(ExportBatteryFile, "Export battery file...", CMDEN_GB | CMDEN_G
     wxString fn = dlg.GetPath();
     wxString msg;
 
-    if (panel->emusys->emuWriteBattery(fn.mb_fn_str()))
-        msg.Printf(_("Wrote battery %s"), fn.c_str());
+    if (panel->emusys->emuWriteBattery(UTF8(fn)))
+        msg.Printf(_("Wrote battery %s"), fn.wc_str());
     else
-        msg.Printf(_("Error writing battery %s"), fn.c_str());
+        msg.Printf(_("Error writing battery %s"), fn.wc_str());
 
     systemScreenMessage(msg);
 }
@@ -1149,9 +1157,9 @@ EVT_HANDLER_MASK(ExportGamesharkSnapshot, "Export GameShark snapshot...", CMDEN_
     // fix in GBA.cpp
     if (CPUWriteGSASnapshot(fn.utf8_str(), tit->GetValue().utf8_str(),
             dsc->GetValue().utf8_str(), n->GetValue().utf8_str()))
-        msg.Printf(_("Saved snapshot file %s"), fn.c_str());
+        msg.Printf(_("Saved snapshot file %s"), fn.wc_str());
     else
-        msg.Printf(_("Error saving snapshot file %s"), fn.c_str());
+        msg.Printf(_("Error saving snapshot file %s"), fn.wc_str());
 
     systemScreenMessage(msg);
 }
@@ -1186,12 +1194,12 @@ EVT_HANDLER_MASK(ScreenCapture, "Screen capture...", CMDEN_GB | CMDEN_GBA)
     }
 
     if (fmt == 0)
-        panel->emusys->emuWritePNG(fn.mb_fn_str());
+        panel->emusys->emuWritePNG(UTF8(fn));
     else
-        panel->emusys->emuWriteBMP(fn.mb_fn_str());
+        panel->emusys->emuWriteBMP(UTF8(fn));
 
     wxString msg;
-    msg.Printf(_("Wrote snapshot %s"), fn.c_str());
+    msg.Printf(_("Wrote snapshot %s"), fn.wc_str());
     systemScreenMessage(msg);
 }
 
@@ -1217,7 +1225,7 @@ EVT_HANDLER_MASK(RecordSoundStartRecording, "Start sound recording...", CMDEN_NS
             ext.Replace(wxT(","), wxT(";*."));
             ext.insert(0, wxT("*."));
 
-            if (sound_extno < 0 && ext.find(wxT("*.mp3")) != wxString::npos)
+            if (sound_extno < 0 && ext.find(wxT("*.wav")) != wxString::npos)
                 sound_extno = extno;
 
             sound_exts.append(ext);
@@ -1588,6 +1596,36 @@ EVT_HANDLER(JoypadAutoholdStart, "Autohold Start (toggle)")
     GetMenuOptionInt(keyName, autohold, keym);
 }
 
+#include "background-input.h"
+
+EVT_HANDLER(AllowKeyboardBackgroundInput, "Allow keyboard background input (toggle)")
+{
+    bool menuPress;
+    GetMenuOptionBool("AllowKeyboardBackgroundInput", menuPress);
+    toggleBooleanVar(&menuPress, &allowKeyboardBackgroundInput);
+    SetMenuOption("AllowKeyboardBackgroundInput", allowKeyboardBackgroundInput ? 1 : 0);
+
+    disableKeyboardBackgroundInput();
+
+    if (allowKeyboardBackgroundInput) {
+        if (panel && panel->panel) {
+            enableKeyboardBackgroundInput(panel->panel->GetWindow());
+        }
+    }
+
+    update_opts();
+}
+
+EVT_HANDLER(AllowJoystickBackgroundInput, "Allow joystick background input (toggle)")
+{
+    bool menuPress;
+    GetMenuOptionBool("AllowJoystickBackgroundInput", menuPress);
+    toggleBooleanVar(&menuPress, &allowJoystickBackgroundInput);
+    SetMenuOption("AllowJoystickBackgroundInput", allowJoystickBackgroundInput ? 1 : 0);
+
+    update_opts();
+}
+
 EVT_HANDLER_MASK(LoadGameRecent, "Load most recent save", CMDEN_SAVST)
 {
     panel->LoadState();
@@ -1878,6 +1916,22 @@ EVT_HANDLER(CheatsEnable, "Enable cheats (toggle)")
     toggleBitVar(&menuPress, &cheatsEnabled, 1);
     SetMenuOption("CheatsEnable", menuPress ? 1 : 0);
     GetMenuOptionInt("CheatsEnable", cheatsEnabled, 1);
+    update_opts();
+}
+
+EVT_HANDLER(ColorizerHack, "Enable Colorizer Hack (toggle)")
+{
+    int val = 0;
+    GetMenuOptionInt("ColorizerHack", val, 1);
+
+    if (val == 1 && useBiosFileGB == 1) {
+        wxLogError(_("Cannot use Colorizer Hack when GB BIOS File is enabled."));
+        val = 0;
+        SetMenuOption("ColorizerHack", 0);
+    }
+
+    colorizerHack = val;
+
     update_opts();
 }
 
@@ -2361,7 +2415,7 @@ void MainFrame::GDBBreak()
                 if (!debugOpenPty())
                     return;
 
-                msg.Printf(_("Waiting for connection at %s"), debugGetSlavePty().c_str());
+                msg.Printf(_("Waiting for connection at %s"), debugGetSlavePty().wc_str());
             } else
 #endif
             {
@@ -2481,6 +2535,24 @@ EVT_HANDLER(GeneralConfigure, "General options...")
 EVT_HANDLER(SpeedupConfigure, "Speedup / Turbo options...")
 {
     wxDialog* dlg = GetXRCDialog("SpeedupConfig");
+
+    unsigned save_speedup_throttle            = speedup_throttle;
+    unsigned save_speedup_frame_skip          = speedup_frame_skip;
+    bool     save_speedup_throttle_frame_skip = speedup_throttle_frame_skip;
+
+    if (ShowModal(dlg) == wxID_OK)
+        update_opts();
+    else {
+        // Restore values if cancel pressed.
+        speedup_throttle            = save_speedup_throttle;
+        speedup_frame_skip          = save_speedup_frame_skip;
+        speedup_throttle_frame_skip = save_speedup_throttle_frame_skip;
+    }
+}
+
+EVT_HANDLER(UIConfigure, "UI Settings...")
+{
+    wxDialog* dlg = GetXRCDialog("UIConfig");
 
     if (ShowModal(dlg) == wxID_OK)
         update_opts();
@@ -2753,7 +2825,7 @@ EVT_HANDLER_MASK(DisplayConfigure, "Display options...", CMDEN_NREC_ANY)
 
     if (panel->panel) {
         panel->panel->Destroy();
-        panel->panel = NULL;
+        panel->panel = nullptr;
     }
 
     update_opts();
@@ -2771,7 +2843,7 @@ EVT_HANDLER_MASK(ChangeFilter, "Change Pixel Filter", CMDEN_NREC_ANY)
 
     if (panel->panel) {
         panel->panel->Destroy();
-        panel->panel = NULL;
+        panel->panel = nullptr;
     }
 
     wxString msg;
@@ -2786,7 +2858,7 @@ EVT_HANDLER_MASK(ChangeIFB, "Change Interframe Blending", CMDEN_NREC_ANY)
 
     if (panel->panel) {
         panel->panel->Destroy();
-        panel->panel = NULL;
+        panel->panel = nullptr;
     }
 
     wxString msg;
@@ -2827,7 +2899,10 @@ EVT_HANDLER_MASK(SoundConfigure, "Sound options...", CMDEN_NREC_ANY)
             // or init-only options
             (oapi == AUD_XAUDIO2 && oupmix != gopts.upmix) || (oapi == AUD_FAUDIO && oupmix != gopts.upmix) || (oapi == AUD_DIRECTSOUND && ohw != gopts.dsound_hw_accel))) {
         soundShutdown();
-        soundInit();
+
+        if (!soundInit()) {
+            wxLogError(_("Could not initialize the sound driver!"));
+        }
     }
 
     soundSetVolume((float)gopts.sound_vol / 100.0);
@@ -2845,11 +2920,17 @@ EVT_HANDLER(EmulatorDirectories, "Directories...")
 EVT_HANDLER(JoypadConfigure, "Joypad options...")
 {
     wxDialog* dlg = GetXRCDialog("JoypadConfig");
-    joy.Attach(NULL);
-    joy.Add();
+    joy.PollAllJoysticks();
+
+    auto frame = wxGetApp().frame;
+    bool joy_timer = frame->IsJoyPollTimerRunning();
+
+    if (!joy_timer) frame->StartJoyPollTimer();
 
     if (ShowModal(dlg) == wxID_OK)
         update_opts();
+
+    if (!joy_timer) frame->StopJoyPollTimer();
 
     SetJoystick();
 }
@@ -2857,9 +2938,30 @@ EVT_HANDLER(JoypadConfigure, "Joypad options...")
 EVT_HANDLER(Customize, "Customize UI...")
 {
     wxDialog* dlg = GetXRCDialog("AccelConfig");
+    joy.PollAllJoysticks();
+
+    auto frame = wxGetApp().frame;
+    bool joy_timer = frame->IsJoyPollTimerRunning();
+
+    if (!joy_timer) frame->StartJoyPollTimer();
 
     if (ShowModal(dlg) == wxID_OK)
         update_opts();
+
+    if (!joy_timer) frame->StopJoyPollTimer();
+
+    SetJoystick();
+}
+
+#ifndef NO_ONLINEUPDATES
+#include "autoupdater/autoupdater.h"
+#endif // NO_ONLINEUPDATES
+
+EVT_HANDLER(UpdateEmu, "Check for updates...")
+{
+#ifndef NO_ONLINEUPDATES
+    checkUpdatesUi();
+#endif // NO_ONLINEUPDATES
 }
 
 EVT_HANDLER(FactoryReset, "Factory Reset...")
@@ -2897,24 +2999,14 @@ EVT_HANDLER(wxID_ABOUT, "About...")
 {
     wxAboutDialogInfo ai;
     ai.SetName(wxT("VisualBoyAdvance-M"));
-    wxString version = wxT("");
-#ifndef FINAL_BUILD
-#ifndef VERSION
-# define VERSION "git"
-#endif
-
-    if (!version.IsEmpty())
-        version = version + wxT("-");
-
-    version = version + wxT(VERSION);
-#endif
+    wxString version(vbam_version);
     ai.SetVersion(version);
     // setting website, icon, license uses custom aboutbox on win32 & macosx
     // but at least win32 standard about is nothing special
     ai.SetWebSite(wxT("http://www.vba-m.com/"));
-    ai.SetIcon(GetIcon());
+    ai.SetIcon(GetIcons().GetIcon(wxSize(32, 32), wxIconBundle::FALLBACK_NEAREST_LARGER));
     ai.SetDescription(_("Nintendo GameBoy (+Color+Advance) emulator."));
-    ai.SetCopyright(_("Copyright (C) 1999-2003 Forgotten\nCopyright (C) 2004-2006 VBA development team\nCopyright (C) 2007-2017 VBA-M development team"));
+    ai.SetCopyright(_("Copyright (C) 1999-2003 Forgotten\nCopyright (C) 2004-2006 VBA development team\nCopyright (C) 2007-2020 VBA-M development team"));
     ai.SetLicense(_("This program is free software: you can redistribute it and/or modify\n"
                     "it under the terms of the GNU General Public License as published by\n"
                     "the Free Software Foundation, either version 2 of the License, or\n"
@@ -2962,6 +3054,8 @@ EVT_HANDLER(wxID_ABOUT, "About...")
     ai.AddDeveloper(wxT("rkitover"));
     ai.AddDeveloper(wxT("Mystro256"));
     ai.AddDeveloper(wxT("retro-wertz"));
+    ai.AddDeveloper(wxT("denisfa"));
+    ai.AddDeveloper(wxT("orbea"));
     ai.AddDeveloper(wxT("Orig. VBA team"));
     ai.AddDeveloper(wxT("... many contributors who send us patches/PRs"));
     wxAboutBox(ai);
@@ -2970,12 +3064,24 @@ EVT_HANDLER(wxID_ABOUT, "About...")
 EVT_HANDLER(Bilinear, "Use bilinear filter with 3d renderer")
 {
     GetMenuOptionBool("Bilinear", gopts.bilinear);
+    // Force new panel with new bilinear option
+    if (panel->panel) {
+        panel->panel->Destroy();
+        panel->panel = nullptr;
+    }
     update_opts();
 }
 
 EVT_HANDLER(RetainAspect, "Retain aspect ratio when resizing")
 {
     GetMenuOptionBool("RetainAspect", gopts.retain_aspect);
+
+    // Force new panel with new aspect ratio options.
+    if (panel->panel) {
+        panel->panel->Destroy();
+        panel->panel = nullptr;
+    }
+
     update_opts();
 }
 
@@ -3041,6 +3147,37 @@ EVT_HANDLER(AGBPrinter, "Enable AGB printer")
     update_opts();
 }
 
+EVT_HANDLER_MASK(GBALcdFilter, "Enable LCD filter", CMDEN_GBA)
+{
+    bool menuPress;
+    GetMenuOptionBool("GBALcdFilter", menuPress);
+    toggleBooleanVar(&menuPress, &gbaLcdFilter);
+    SetMenuOption("GBALcdFilter", gbaLcdFilter ? 1 : 0);
+    utilUpdateSystemColorMaps(gbaLcdFilter);
+    update_opts();
+}
+
+EVT_HANDLER_MASK(GBLcdFilter, "Enable LCD filter", CMDEN_GB)
+{
+    bool menuPress;
+    GetMenuOptionBool("GBLcdFilter", menuPress);
+    toggleBooleanVar(&menuPress, &gbLcdFilter);
+    SetMenuOption("GBLcdFilter", gbLcdFilter ? 1 : 0);
+    utilUpdateSystemColorMaps(gbLcdFilter);
+    update_opts();
+}
+
+EVT_HANDLER(GBColorOption, "Enable GB color option")
+{
+    bool menuPress;
+    bool intVar = gbColorOption ? true : false;
+    GetMenuOptionBool("GBColorOption", menuPress);
+    toggleBooleanVar(&menuPress, &intVar);
+    SetMenuOption("GBColorOption", intVar ? 1 : 0);
+    gbColorOption = intVar ? 1 : 0;
+    update_opts();
+}
+
 EVT_HANDLER(ApplyPatches, "Apply IPS/UPS/IPF patches if found")
 {
     GetMenuOptionInt("ApplyPatches", autoPatch, 1);
@@ -3050,7 +3187,7 @@ EVT_HANDLER(ApplyPatches, "Apply IPS/UPS/IPF patches if found")
 EVT_HANDLER(MMX, "Enable MMX")
 {
 #ifdef MMX
-    GetMenuOptionInt("MMX", disableMMX, 1);
+    GetMenuOptionInt("MMX", enableMMX, 1);
     update_opts();
 #endif
 }
@@ -3134,7 +3271,17 @@ EVT_HANDLER(BootRomEn, "Use the specified BIOS file for GBA")
 
 EVT_HANDLER(BootRomGB, "Use the specified BIOS file for GB")
 {
-    GetMenuOptionInt("BootRomGB", useBiosFileGB, 1);
+    int val = 0;
+    GetMenuOptionInt("BootRomGB", val, 1);
+
+    if (val == 1 && colorizerHack == 1) {
+        wxLogError(_("Cannot use GB BIOS when Colorizer Hack is enabled."));
+        val = 0;
+        SetMenuOption("BootRomGB", 0);
+    }
+
+    useBiosFileGB = val;
+
     update_opts();
 }
 
@@ -3174,6 +3321,9 @@ void SetLinkTypeMenu(const char* type, int value)
     mf->SetMenuOption(type, 1);
     gopts.gba_link_type = value;
     update_opts();
+#ifndef NO_LINK
+    CloseLink();
+#endif
     mf->EnableNetworkMenu();
 }
 

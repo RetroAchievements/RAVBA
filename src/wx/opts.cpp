@@ -1,5 +1,5 @@
-#include "../common/ConfigManager.h"
 #include "wxvbam.h"
+#include <vector>
 #include <algorithm>
 #include <wx/display.h>
 #include "strutils.h"
@@ -41,9 +41,9 @@
 opts_t gopts;
 
 // having the standard menu accels here means they will work even without menus
-const wxAcceleratorEntry default_accels[] = {
-    wxAcceleratorEntry(wxMOD_CMD, wxT('C'), XRCID("CheatsList")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('N'), XRCID("NextFrame")),
+const wxAcceleratorEntryUnicode default_accels[] = {
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('C'), XRCID("CheatsList")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('N'), XRCID("NextFrame")),
     // some ports add ctrl-q anyway, so may as well make it official
     // maybe make alt-f4 universal as well...
     // FIXME: ctrl-Q does not work on wxMSW
@@ -55,79 +55,79 @@ const wxAcceleratorEntry default_accels[] = {
     // this was annoying people #298
     //wxAcceleratorEntry(wxMOD_CMD, wxT('X'), wxID_EXIT),
 
-    wxAcceleratorEntry(wxMOD_CMD, wxT('Q'), wxID_EXIT),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('Q'), wxID_EXIT),
     // FIXME: ctrl-W does not work on wxMSW
-    wxAcceleratorEntry(wxMOD_CMD, wxT('W'), wxID_CLOSE),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('W'), wxID_CLOSE),
     // load most recent is more commonly used than load other
     //wxAcceleratorEntry(wxMOD_CMD, wxT('L'), XRCID("Load")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('L'), XRCID("LoadGameRecent")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F1, XRCID("LoadGame01")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F2, XRCID("LoadGame02")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F3, XRCID("LoadGame03")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F4, XRCID("LoadGame04")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F5, XRCID("LoadGame05")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F6, XRCID("LoadGame06")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F7, XRCID("LoadGame07")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F8, XRCID("LoadGame08")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F9, XRCID("LoadGame09")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_F10, XRCID("LoadGame10")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_PAUSE, XRCID("Pause")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('P'), XRCID("Pause")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('R'), XRCID("Reset")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('L'), XRCID("LoadGameRecent")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F1, XRCID("LoadGame01")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F2, XRCID("LoadGame02")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F3, XRCID("LoadGame03")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F4, XRCID("LoadGame04")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F5, XRCID("LoadGame05")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F6, XRCID("LoadGame06")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F7, XRCID("LoadGame07")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F8, XRCID("LoadGame08")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F9, XRCID("LoadGame09")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F10, XRCID("LoadGame10")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_PAUSE, XRCID("Pause")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('P'), XRCID("Pause")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('R'), XRCID("Reset")),
     // add shortcuts for original size multiplier #415
-    wxAcceleratorEntry(wxMOD_NONE, wxT('1'), XRCID("SetSize1x")),
-    wxAcceleratorEntry(wxMOD_NONE, wxT('2'), XRCID("SetSize2x")),
-    wxAcceleratorEntry(wxMOD_NONE, wxT('3'), XRCID("SetSize3x")),
-    wxAcceleratorEntry(wxMOD_NONE, wxT('4'), XRCID("SetSize4x")),
-    wxAcceleratorEntry(wxMOD_NONE, wxT('5'), XRCID("SetSize5x")),
-    wxAcceleratorEntry(wxMOD_NONE, wxT('6'), XRCID("SetSize6x")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('1'), XRCID("SetSize1x")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('2'), XRCID("SetSize2x")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('3'), XRCID("SetSize3x")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('4'), XRCID("SetSize4x")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('5'), XRCID("SetSize5x")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('6'), XRCID("SetSize6x")),
     // save oldest is more commonly used than save other
     //wxAcceleratorEntry(wxMOD_CMD, wxT('S'), XRCID("Save")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('S'), XRCID("SaveGameOldest")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F1, XRCID("SaveGame01")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F2, XRCID("SaveGame02")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F3, XRCID("SaveGame03")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F4, XRCID("SaveGame04")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F5, XRCID("SaveGame05")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F6, XRCID("SaveGame06")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F7, XRCID("SaveGame07")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F8, XRCID("SaveGame08")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F9, XRCID("SaveGame09")),
-    wxAcceleratorEntry(wxMOD_SHIFT, WXK_F10, XRCID("SaveGame10")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('S'), XRCID("SaveGameOldest")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F1, XRCID("SaveGame01")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F2, XRCID("SaveGame02")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F3, XRCID("SaveGame03")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F4, XRCID("SaveGame04")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F5, XRCID("SaveGame05")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F6, XRCID("SaveGame06")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F7, XRCID("SaveGame07")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F8, XRCID("SaveGame08")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F9, XRCID("SaveGame09")),
+    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F10, XRCID("SaveGame10")),
     // I prefer the SDL ESC key binding
     //wxAcceleratorEntry(wxMOD_NONE, WXK_ESCAPE, XRCID("ToggleFullscreen"),
     // alt-enter is more standard anyway
-    wxAcceleratorEntry(wxMOD_ALT, WXK_RETURN, XRCID("ToggleFullscreen")),
-    wxAcceleratorEntry(wxMOD_ALT, wxT('1'), XRCID("JoypadAutofireA")),
-    wxAcceleratorEntry(wxMOD_ALT, wxT('2'), XRCID("JoypadAutofireB")),
-    wxAcceleratorEntry(wxMOD_ALT, wxT('3'), XRCID("JoypadAutofireL")),
-    wxAcceleratorEntry(wxMOD_ALT, wxT('4'), XRCID("JoypadAutofireR")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('1'), XRCID("VideoLayersBG0")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('2'), XRCID("VideoLayersBG1")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('3'), XRCID("VideoLayersBG2")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('4'), XRCID("VideoLayersBG3")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('5'), XRCID("VideoLayersOBJ")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('6'), XRCID("VideoLayersWIN0")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('7'), XRCID("VideoLayersWIN1")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('8'), XRCID("VideoLayersOBJWIN")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('B'), XRCID("Rewind")),
+    wxAcceleratorEntryUnicode(wxMOD_ALT, WXK_RETURN, XRCID("ToggleFullscreen")),
+    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('1'), XRCID("JoypadAutofireA")),
+    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('2'), XRCID("JoypadAutofireB")),
+    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('3'), XRCID("JoypadAutofireL")),
+    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('4'), XRCID("JoypadAutofireR")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('1'), XRCID("VideoLayersBG0")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('2'), XRCID("VideoLayersBG1")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('3'), XRCID("VideoLayersBG2")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('4'), XRCID("VideoLayersBG3")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('5'), XRCID("VideoLayersOBJ")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('6'), XRCID("VideoLayersWIN0")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('7'), XRCID("VideoLayersWIN1")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('8'), XRCID("VideoLayersOBJWIN")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('B'), XRCID("Rewind")),
     // following are not in standard menus
     // FILExx are filled in when recent menu is filled
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F1, wxID_FILE1),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F2, wxID_FILE2),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F3, wxID_FILE3),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F4, wxID_FILE4),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F5, wxID_FILE5),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F6, wxID_FILE6),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F7, wxID_FILE7),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F8, wxID_FILE8),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F9, wxID_FILE9),
-    wxAcceleratorEntry(wxMOD_CMD, WXK_F10, wxID_FILE10),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('0'), XRCID("VideoLayersReset")),
-    wxAcceleratorEntry(wxMOD_CMD, wxT('G'), XRCID("ChangeFilter")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_NUMPAD_ADD, XRCID("IncreaseVolume")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_NUMPAD_SUBTRACT, XRCID("DecreaseVolume")),
-    wxAcceleratorEntry(wxMOD_NONE, WXK_NUMPAD_ENTER, XRCID("ToggleSound"))
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F1, wxID_FILE1),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F2, wxID_FILE2),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F3, wxID_FILE3),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F4, wxID_FILE4),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F5, wxID_FILE5),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F6, wxID_FILE6),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F7, wxID_FILE7),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F8, wxID_FILE8),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F9, wxID_FILE9),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F10, wxID_FILE10),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('0'), XRCID("VideoLayersReset")),
+    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('G'), XRCID("ChangeFilter")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_NUMPAD_ADD, XRCID("IncreaseVolume")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_NUMPAD_SUBTRACT, XRCID("DecreaseVolume")),
+    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_NUMPAD_ENTER, XRCID("ToggleSound"))
 };
 const int num_def_accels = sizeof(default_accels) / sizeof(default_accels[0]);
 
@@ -151,22 +151,20 @@ wxJoyKeyBinding defkeys_keyboard[NUM_KEYS] = {
     WJKB(WXK_SPACE), WJKB(0), WJKB(0)
 };
 
-wxJoyKeyBinding defkeys_joystick[NUM_KEYS] = {
-    WJKB(0, WXJB_HAT_N, 1), WJKB(0, WXJB_HAT_S, 1), WJKB(0, WXJB_HAT_W, 1), WJKB(0, WXJB_HAT_E, 1),
-    WJKB(0, WXJB_BUTTON, 1), WJKB(1, WXJB_BUTTON, 1), WJKB(4, WXJB_BUTTON, 1), WJKB(5, WXJB_BUTTON, 1),
-    WJKB(6, WXJB_BUTTON, 1), WJKB(7, WXJB_BUTTON, 1),
-    WJKB(0), WJKB(0), WJKB(0), WJKB(0),
-    WJKB(0), WJKB(0), WJKB(0), WJKB(0),
-    WJKB(0), WJKB(0), WJKB(0)
-};
-
-wxJoyKeyBinding extrakeys_joystick[NUM_KEYS] = {
-    WJKB(1, WXJB_AXIS_MINUS, 1), WJKB(1, WXJB_AXIS_PLUS, 1), WJKB(0, WXJB_AXIS_MINUS, 1), WJKB(0, WXJB_AXIS_PLUS, 1),
-    WJKB(0), WJKB(0), WJKB(0), WJKB(0),
-    WJKB(0), WJKB(0),
-    WJKB(0), WJKB(0), WJKB(0), WJKB(0),
-    WJKB(0), WJKB(0), WJKB(0), WJKB(0),
-    WJKB(0), WJKB(0), WJKB(0)
+std::vector<std::vector<wxJoyKeyBinding>> defkeys_joystick = {
+    { WJKB(11, WXJB_BUTTON, 1), WJKB(1, WXJB_AXIS_MINUS, 1), WJKB(3, WXJB_AXIS_MINUS, 1) },
+    { WJKB(12, WXJB_BUTTON, 1), WJKB(1, WXJB_AXIS_PLUS,  1), WJKB(3, WXJB_AXIS_PLUS,  1) },
+    { WJKB(13, WXJB_BUTTON, 1), WJKB(0, WXJB_AXIS_MINUS, 1), WJKB(2, WXJB_AXIS_MINUS, 1) },
+    { WJKB(14, WXJB_BUTTON, 1), WJKB(0, WXJB_AXIS_PLUS,  1), WJKB(2, WXJB_AXIS_PLUS,  1) },
+    { WJKB(0, WXJB_BUTTON, 1) },
+    { WJKB(1, WXJB_BUTTON, 1) },
+    { WJKB(2, WXJB_BUTTON, 1), WJKB( 9, WXJB_BUTTON, 1), WJKB(4, WXJB_AXIS_PLUS,  1) },
+    { WJKB(3, WXJB_BUTTON, 1), WJKB(10, WXJB_BUTTON, 1), WJKB(5, WXJB_AXIS_PLUS,  1) },
+    { WJKB(4, WXJB_BUTTON, 1) },
+    { WJKB(6, WXJB_BUTTON, 1) },
+    {}, {}, {}, {},
+    {}, {}, {}, {},
+    {}, {}, {}
 };
 
 wxAcceleratorEntry_v sys_accels;
@@ -209,6 +207,9 @@ opt_desc opts[] = {
 
     /// GB
     STROPT("GB/BiosFile", "", wxTRANSLATE("BIOS file to use for GB, if enabled"), gopts.gb_bios),
+    INTOPT("GB/ColorOption", "GBColorOption", wxTRANSLATE("GB color enhancement, if enabled"), gbColorOption, 0, 1),
+    INTOPT("GB/ColorizerHack", "ColorizerHack", wxTRANSLATE("Enable DX Colorization Hacks"), colorizerHack, 0, 1),
+    BOOLOPT("GB/LCDFilter", "GBLcdFilter", wxTRANSLATE("Apply LCD filter, if enabled"), gbLcdFilter),
     STROPT("GB/GBCBiosFile", "", wxTRANSLATE("BIOS file to use for GBC, if enabled"), gopts.gbc_bios),
     NOOPT(wxT("GB/Palette0"), "", wxTRANSLATE("The default palette, as 8 comma-separated 4-digit hex integers (rgb555).")),
     NOOPT(wxT("GB/Palette1"), "", wxTRANSLATE("The first user palette, as 8 comma-separated 4-digit hex integers (rgb555).")),
@@ -220,10 +221,13 @@ opt_desc opts[] = {
 
     /// GBA
     STROPT("GBA/BiosFile", "", wxTRANSLATE("BIOS file to use, if enabled"), gopts.gba_bios),
+    BOOLOPT("GBA/LCDFilter", "GBALcdFilter", wxTRANSLATE("Apply LCD filter, if enabled"), gbaLcdFilter),
 #ifndef NO_LINK
     BOOLOPT("GBA/LinkAuto", "LinkAuto", wxTRANSLATE("Enable link at boot"), gopts.link_auto),
     INTOPT("GBA/LinkFast", "SpeedOn", wxTRANSLATE("Enable faster network protocol by default"), linkHacks, 0, 1),
     STROPT("GBA/LinkHost", "", wxTRANSLATE("Default network link client host"), gopts.link_host),
+    STROPT("GBA/ServerIP", "", wxTRANSLATE("Default network link server IP to bind"), gopts.server_ip),
+    UINTOPT("GBA/LinkPort", "", wxTRANSLATE("Default network link port (server and client)"), gopts.link_port, 0, 65535),
     INTOPT("GBA/LinkProto", "LinkProto", wxTRANSLATE("Default network protocol"), gopts.link_proto, 0, 1),
     INTOPT("GBA/LinkTimeout", "LinkTimeout", wxTRANSLATE("Link timeout (ms)"), linkTimeout, 0, 9999999),
     INTOPT("GBA/LinkType", "LinkType", wxTRANSLATE("Link cable type"), gopts.gba_link_type, 0, 5),
@@ -234,9 +238,6 @@ opt_desc opts[] = {
     BOOLOPT("General/AutoLoadLastState", "", wxTRANSLATE("Automatically load last saved state"), gopts.autoload_state),
     STROPT("General/BatteryDir", "", wxTRANSLATE("Directory to store game save files (relative paths are relative to ROM; blank is config dir)"), gopts.battery_dir),
     BOOLOPT("General/FreezeRecent", "", wxTRANSLATE("Freeze recent load list"), gopts.recent_freeze),
-#ifndef NO_ONLINEUPDATES
-    ENUMOPT("General/OnlineUpdates", "", wxTRANSLATE("Automatically check for online updates"), gopts.onlineupdates, wxTRANSLATE("never|daily|weekly")),
-#endif // NO_ONLINEUPDATES
     STROPT("General/RecordingDir", "", wxTRANSLATE("Directory to store A/V and game recordings (relative paths are relative to ROM)"), gopts.recording_dir),
     INTOPT("General/RewindInterval", "", wxTRANSLATE("Number of seconds between rewind snapshots (0 to disable)"), gopts.rewind_interval, 0, 600),
     STROPT("General/ScreenshotDir", "", wxTRANSLATE("Directory to store screenshots (relative paths are relative to ROM)"), gopts.scrshot_dir),
@@ -257,13 +258,14 @@ opt_desc opts[] = {
     INTOPT("preferences/agbPrint", "AGBPrinter", wxTRANSLATE("Enable AGB debug print"), agbPrint, 0, 1),
     INTOPT("preferences/autoFrameSkip", "FrameSkipAuto", wxTRANSLATE("Auto skip frames."), autoFrameSkip, 0, 1),
     INTOPT("preferences/autoPatch", "ApplyPatches", wxTRANSLATE("Apply IPS/UPS/IPF patches if found"), autoPatch, 0, 1),
-    INTOPT("preferences/autoSaveCheatList", "", wxTRANSLATE("Automatically save and load cheat list"), autoSaveLoadCheatList, 0, 1),
+    BOOLOPT("preferences/autoSaveLoadCheatList", "", wxTRANSLATE("Automatically save and load cheat list"), gopts.autoload_cheats),
     INTOPT("preferences/borderAutomatic", "", wxTRANSLATE("Automatically enable border for Super GameBoy games"), gbBorderAutomatic, 0, 1),
     INTOPT("preferences/borderOn", "", wxTRANSLATE("Always enable border"), gbBorderOn, 0, 1),
     INTOPT("preferences/captureFormat", "", wxTRANSLATE("Screen capture file format"), captureFormat, 0, 1),
     INTOPT("preferences/cheatsEnabled", "", wxTRANSLATE("Enable cheats"), cheatsEnabled, 0, 1),
+
 #ifdef MMX
-    INTOPT("preferences/disableMMX", "MMX", wxTRANSLATE("Enable MMX"), disableMMX, 0, 1),
+    INTOPT("preferences/enableMMX", "MMX", wxTRANSLATE("Enable MMX"), enableMMX, 0, 1),
 #endif
     INTOPT("preferences/disableStatus", "NoStatusMsg", wxTRANSLATE("Disable on-screen status messages"), disableStatusMessages, 0, 1),
     INTOPT("preferences/emulatorType", "", wxTRANSLATE("Type of system to emulate"), gbEmulatorType, 0, 5),
@@ -289,9 +291,10 @@ opt_desc opts[] = {
     INTOPT("preferences/skipBios", "SkipIntro", wxTRANSLATE("Skip BIOS initialization"), skipBios, 0, 1),
     INTOPT("preferences/skipSaveGameCheats", "", wxTRANSLATE("Do not overwrite cheat list when loading state"), skipSaveGameCheats, 0, 1),
     INTOPT("preferences/skipSaveGameBattery", "", wxTRANSLATE("Do not overwrite native (battery) save when loading state"), skipSaveGameBattery, 0, 1),
-    UINTOPT("preferences/throttle", "", wxTRANSLATE("Throttle game speed, even when accelerated (0-500%, 0 = no throttle)"), throttle, 0, 600),
-    UINTOPT("preferences/speedupThrottle", "", wxTRANSLATE("Set throttle for speedup key (0-600%, 0 = no throttle)"), speedup_throttle, 0, 600),
-    UINTOPT("preferences/speedupFrameSkip", "", wxTRANSLATE("Set frame skip for speedup key (0-30)"), speedup_frame_skip, 0, 30),
+    UINTOPT("preferences/throttle", "", wxTRANSLATE("Throttle game speed, even when accelerated (0-450%, 0 = no throttle)"), throttle, 0, 450),
+    UINTOPT("preferences/speedupThrottle", "", wxTRANSLATE("Set throttle for speedup key (0-3000%, 0 = no throttle)"), speedup_throttle, 0, 3000),
+    UINTOPT("preferences/speedupFrameSkip", "", wxTRANSLATE("Number of frames to skip with speedup (instead of speedup throttle)"), speedup_frame_skip, 0, 300),
+    BOOLOPT("preferences/speedupThrottleFrameSkip", "", wxTRANSLATE("Use frame skip for speedup throttle"), speedup_throttle_frame_skip),
     INTOPT("preferences/useBiosGB", "BootRomGB", wxTRANSLATE("Use the specified BIOS file for GB"), useBiosFileGB, 0, 1),
     INTOPT("preferences/useBiosGBA", "BootRomEn", wxTRANSLATE("Use the specified BIOS file"), useBiosFileGBA, 0, 1),
     INTOPT("preferences/useBiosGBC", "BootRomGBC", wxTRANSLATE("Use the specified BIOS file for GBC"), useBiosFileGBC, 0, 1),
@@ -304,6 +307,11 @@ opt_desc opts[] = {
     UINTOPT("geometry/windowWidth", "Width", wxTRANSLATE("Window width at startup"), windowWidth, 0, 99999),
     INTOPT("geometry/windowX", "X", wxTRANSLATE("Window axis X position at startup"), windowPositionX, -1, 99999),
     INTOPT("geometry/windowY", "Y", wxTRANSLATE("Window axis Y position at startup"), windowPositionY, -1, 99999),
+
+    /// UI
+    BOOLOPT("ui/allowKeyboardBackgroundInput", "AllowKeyboardBackgroundInput", wxTRANSLATE("Capture key events while on background"), allowKeyboardBackgroundInput),
+    BOOLOPT("ui/allowJoystickBackgroundInput", "AllowJoystickBackgroundInput", wxTRANSLATE("Capture joy events while on background"), allowJoystickBackgroundInput),
+    BOOLOPT("ui/hideMenuBar", "", wxTRANSLATE("Hide menu bar when mouse is inactive"), gopts.hide_menu_bar),
 
     /// Sound
     ENUMOPT("Sound/AudioAPI", "", wxTRANSLATE("Sound API; if unsupported, default API will be used"), gopts.audio_api, wxTRANSLATE("sdl|openal|directsound|xaudio2|faudio")),
@@ -361,11 +369,14 @@ opts_t::opts_t()
     autofire_rate = 1;
     print_auto_page = true;
     autoPatch = true;
-#ifndef NO_ONLINEUPDATES
-    onlineupdates = 1;
-#endif // NO_ONLINEUPDATES
     // quick fix for issues #48 and #445
     link_host = "127.0.0.1";
+    server_ip = "*";
+    link_port = 5738;
+
+    hide_menu_bar = true;
+
+    skipSaveGameBattery = true;
 }
 
 // for binary_search() and friends
@@ -378,12 +389,12 @@ bool opt_lt(const opt_desc& opt1, const opt_desc& opt2)
 void set_default_keys()
 {
     for (int i = 0; i < NUM_KEYS; i++) {
+        gopts.joykey_bindings[0][i].clear();
+
         if (defkeys_keyboard[i].key)
             gopts.joykey_bindings[0][i].push_back(defkeys_keyboard[i]);
-        if (defkeys_joystick[i].joy)
-            gopts.joykey_bindings[0][i].push_back(defkeys_joystick[i]);
-        if (extrakeys_joystick[i].joy)
-            gopts.joykey_bindings[0][i].push_back(extrakeys_joystick[i]);
+        for (auto bind : defkeys_joystick[i])
+            gopts.joykey_bindings[0][i].push_back(bind);
     }
 }
 
@@ -569,7 +580,7 @@ void load_opts()
             cfg->Read(opt.opt, &opt.curint, *opt.intopt);
 
             if (opt.curint < opt.min || opt.curint > opt.max) {
-                wxLogWarning(_("Invalid value %d for option %s; valid values are %d - %d"), opt.curint, opt.opt.c_str(), opt.min, opt.max);
+                wxLogWarning(_("Invalid value %d for option %s; valid values are %d - %d"), opt.curint, opt.opt.c_str(), int(opt.min), int(opt.max));
             } else
                 *opt.intopt = opt.curint;
         } else if (opt.doubleopt) {
@@ -663,20 +674,22 @@ void load_opts()
         kbopt.append(cmdtab[i].cmd);
 
         if (cfg->Read(kbopt, &s) && s.size()) {
-            wxAcceleratorEntry_v val = wxKeyTextCtrl::FromString(s);
+            wxAcceleratorEntry_v val = wxJoyKeyTextCtrl::ToAccelFromString(s);
 
             if (!val.size())
                 wxLogWarning(_("Invalid key binding %s for %s"), s.c_str(), kbopt.c_str());
             else {
                 for (size_t j = 0; j < val.size(); j++)
-                    val[j].Set(val[j].GetFlags(), val[j].GetKeyCode(),
-                        cmdtab[i].cmd_id);
+                    val[j].Set(val[j].GetUkey(), val[j].GetJoystick(), val[j].GetFlags(), val[j].GetKeyCode(), cmdtab[i].cmd_id);
 
-                gopts.accels.insert(gopts.accels.end(),
-                    val.begin(), val.end());
+                gopts.accels.insert(gopts.accels.end(), val.begin(), val.end());
             }
         }
     }
+
+    // Make sure linkTimeout is not set to 1, which was the previous default.
+    if (linkTimeout <= 1)
+        linkTimeout = 500;
 
     // recent is special
     // Recent does not get written with defaults
@@ -753,7 +766,7 @@ void update_opts()
             wxString s, o;
             wxString optname;
             optname.Printf(wxT("Joypad/%d/%s"), i + 1, joynames[j].c_str());
-            s = wxJoyKeyTextCtrl::ToString(gopts.joykey_bindings[i][j]);
+            s = wxJoyKeyTextCtrl::ToString(gopts.joykey_bindings[i][j], wxT(','), true);
             cfg->Read(optname, &o);
 
             if (o != s)
@@ -815,7 +828,7 @@ void update_opts()
                 break;
 
         wxAcceleratorEntry_v nv(i, j);
-        wxString nvs = wxKeyTextCtrl::ToString(nv);
+        wxString nvs = wxJoyKeyTextCtrl::FromAccelToString(nv, wxT(','), true);
 
         if (nvs != cfg->Read(command))
             cfg->Write(command, nvs);
@@ -943,11 +956,10 @@ bool opt_set(const wxString& name, const wxString& val)
                 }
 
             if (!val.empty()) {
-                auto aval = wxKeyTextCtrl::FromString(val);
+                auto aval = wxJoyKeyTextCtrl::ToAccelFromString(val);
 
                 for (size_t i = 0; i < aval.size(); i++)
-                    aval[i].Set(aval[i].GetFlags(), aval[i].GetKeyCode(),
-                        cmd->cmd_id);
+                    aval[i].Set(aval[i].GetUkey(), aval[i].GetJoystick(), aval[i].GetFlags(), aval[i].GetKeyCode(), cmd->cmd_id);
 
                 if (!aval.size())
                     wxLogWarning(_("Invalid key binding %s for %s"), val.c_str(), name.c_str());
