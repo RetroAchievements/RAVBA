@@ -1,6 +1,6 @@
 #include "viewsupt.h"
-#include "../common/ConfigManager.h"
 #include "wxvbam.h"
+#include "wxutil.h"
 
 namespace Viewers {
 void Viewer::CloseDlg(wxCloseEvent& ev)
@@ -415,7 +415,7 @@ void MemView::ShowCaret()
 
 void MemView::KeyEvent(wxKeyEvent& ev)
 {
-    uint32_t k = ev.GetKeyCode();
+    uint32_t k = getKeyboardKeyCode(ev);
     int nnib = 2 << fmt;
 
     switch (k) {
@@ -725,7 +725,7 @@ void MemView::Resize(wxSizeEvent& ev)
         Refill();
 }
 
-void MemView::Show(uint32_t addr, bool force_update)
+void MemView::ShowAddr(uint32_t addr, bool force_update)
 {
     if (addr < topaddr || addr >= topaddr + (nlines - 1) * 16) {
         // align to nearest 16-byte block
@@ -776,17 +776,29 @@ ColorView::ColorView(wxWindow* parent, wxWindowID id)
     wxStaticText* lab = new wxStaticText(this, wxID_ANY, _("R:"));
     gs->Add(lab, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     rt = new wxStaticText(this, wxID_ANY, wxT("255"), wxDefaultPosition,
+#if !defined(__WXGTK__)
         wxDefaultSize, wxST_NO_AUTORESIZE);
+#else
+        wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+#endif // !defined(__WXGTK__)
     gs->Add(rt, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     lab = new wxStaticText(this, wxID_ANY, _("G:"));
     gs->Add(lab, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     gt = new wxStaticText(this, wxID_ANY, wxT("255"), wxDefaultPosition,
+#if !defined(__WXGTK__)
         wxDefaultSize, wxST_NO_AUTORESIZE);
+#else
+        wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+#endif // !defined(__WXGTK__)
     gs->Add(gt, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     lab = new wxStaticText(this, wxID_ANY, _("B:"));
     gs->Add(lab, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     bt = new wxStaticText(this, wxID_ANY, wxT("255"), wxDefaultPosition,
+#if !defined(__WXGTK__)
         wxDefaultSize, wxST_NO_AUTORESIZE);
+#else
+        wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
+#endif // !defined(__WXGTK__)
     gs->Add(bt, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     sz->Add(gs);
     sz->Layout();
@@ -1174,7 +1186,7 @@ void GfxViewer::SaveBMP(wxCommandEvent& ev)
     if (ret != wxID_OK)
         return;
 
-    wxBitmap obmp = gv->bm->GetSubBitmap(wxRect(0, 0, gv->bmh, gv->bmh));
+    wxBitmap obmp = gv->bm->GetSubBitmap(wxRect(0, 0, gv->bmw, gv->bmh));
     wxString fn = dlg.GetPath();
     wxBitmapType fmt = dlg.GetFilterIndex() ? wxBITMAP_TYPE_BMP : wxBITMAP_TYPE_PNG;
 
@@ -1200,6 +1212,8 @@ BEGIN_EVENT_TABLE(GfxViewer, Viewer)
 EVT_CHECKBOX(XRCID("Stretch"), GfxViewer::StretchTog)
 EVT_BUTTON(XRCID("Refresh"), GfxViewer::RefreshEv)
 EVT_BUTTON(XRCID("Save"), GfxViewer::SaveBMP)
+EVT_BUTTON(XRCID("SaveGBOAM"), GfxViewer::SaveBMP)
+EVT_BUTTON(XRCID("SaveGBAOAM"), GfxViewer::SaveBMP)
 END_EVENT_TABLE()
 
 IMPLEMENT_DYNAMIC_CLASS(DispCheckBox, wxCheckBox)

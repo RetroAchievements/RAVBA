@@ -41,7 +41,7 @@
 
 #include <time.h>
 
-#include "version.h"
+#include "../common/version_cpp.h"
 
 #include "SDL.h"
 
@@ -307,39 +307,45 @@ bool sdlCheckDirectory(const char* dir)
 
     if (stat(dir, &buf) == 0)
     {
-	if (!(buf.st_mode & S_IFDIR))
-	{
-	    fprintf(stderr, "Error: %s is not a directory\n", dir);
-	    return false;
-	}
-	return true;
+        if (!(buf.st_mode & S_IFDIR))
+        {
+            fprintf(stderr, "Error: %s is not a directory\n", dir);
+            return false;
+        }
+        return true;
     }
     else
     {
-	fprintf(stderr, "Error: %s does not exist\n", dir);
-	return false;
+        fprintf(stderr, "Error: %s does not exist\n", dir);
+        return false;
     }
 }
 
-char* sdlGetFilename(char* name)
+char* sdlGetFilename(const char* name)
 {
-    char path[1024] = ""; // avoid warning about uninitialised value
-    char *filename = strrchr(name, FILE_SEP);
+    char path[1024];
+    const char *filename = strrchr(name, FILE_SEP);
     if (filename)
-        strncpy(path, filename + 1, strlen(filename));
+        strcpy(path, filename + 1);
     else
-        sprintf(path, "%s", name);
+        strcpy(path, name);
     return strdup(path);
 }
 
-char* sdlGetFilePath(char* name)
+char* sdlGetFilePath(const char* name)
 {
-    char path[1024] = ""; // avoid warning about uninitialised value
-    char *filename = strrchr(name, FILE_SEP);
-    if (filename)
-        strncpy(path, name, strlen(name) - strlen(filename));
-    else
-        sprintf(path, "%c%c", '.', FILE_SEP);
+    char path[1024];
+    const char *filename = strrchr(name, FILE_SEP);
+    if (filename) {
+        size_t length = strlen(name) - strlen(filename);
+        memcpy(path, name, length);
+        path[length] = '\0';
+    }
+    else {
+        path[0] = '.';
+        path[1] = FILE_SEP;
+        path[2] = '\0';
+    }
     return strdup(path);
 }
 
@@ -360,7 +366,7 @@ FILE* sdlFindFile(const char* name)
 
     fprintf(stdout, "Searching for file %s\n", name);
 
-    if (GETCWD(buffer, 2048)) {
+    if (GETCWD(buffer, sizeof(buffer))) {
         fprintf(stdout, "Searching current directory: %s\n", buffer);
     }
 
@@ -378,10 +384,10 @@ FILE* sdlFindFile(const char* name)
     }
 
 #ifdef _WIN32
-    char* home = getenv("USERPROFILE");
-    if (home != NULL) {
-        fprintf(stdout, "Searching user profile directory: %s\n", home);
-        sprintf(path, "%s%c%s", home, FILE_SEP, name);
+    char* profileDir = getenv("USERPROFILE");
+    if (profileDir != NULL) {
+        fprintf(stdout, "Searching user profile directory: %s\n", profileDir);
+        sprintf(path, "%s%c%s", profileDir, FILE_SEP, name);
         f = fopen(path, "r");
         if (f != NULL)
             return f;
@@ -392,8 +398,8 @@ FILE* sdlFindFile(const char* name)
 
         if (path != NULL) {
             fprintf(stdout, "Searching PATH\n");
-            strncpy(buffer, path, 4096);
-            buffer[4095] = 0;
+            strncpy(buffer, path, sizeof(buffer));
+            buffer[sizeof(buffer) - 1] = 0;
             char* tok = strtok(buffer, PATH_SEP);
 
             while (tok) {
@@ -471,7 +477,7 @@ static void sdlOpenGLVideoResize()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
         openGL == 2 ? GL_LINEAR : GL_NEAREST);
 
-    // Calculate texture size as a the smallest working power of two
+    // Calculate texture size as the smallest working power of two
     float n1 = log10((float)destWidth) / log10(2.0f);
     float n2 = log10((float)destHeight) / log10(2.0f);
     float n = (n1 > n2) ? n1 : n2;
@@ -733,7 +739,7 @@ void sdlWriteBattery()
     bool result = emulator.emuWriteBattery(buffer);
 
     if (result)
-	systemMessage(0, "Wrote battery '%s'", buffer);
+        systemMessage(0, "Wrote battery '%s'", buffer);
 
     freeSafe(gameFile);
     freeSafe(gameDir);
@@ -763,10 +769,12 @@ void sdlReadBattery()
 
 void sdlReadDesktopVideoMode()
 {
-    SDL_DisplayMode dm;
-    SDL_GetDesktopDisplayMode(SDL_GetWindowDisplayIndex(window), &dm);
-    desktopWidth = dm.w;
-    desktopHeight = dm.h;
+    if (window) {
+        SDL_DisplayMode dm;
+        SDL_GetDesktopDisplayMode(SDL_GetWindowDisplayIndex(window), &dm);
+        desktopWidth = dm.w;
+        desktopHeight = dm.h;
+    }
 }
 
 static void sdlResizeVideo()
@@ -876,7 +884,8 @@ void sdlInitVideo()
 
     sdlResizeVideo();
 }
-#if defined(KMOD_GUI)
+
+#ifndef KMOD_META
 #define KMOD_META KMOD_GUI
 #endif
 
@@ -1508,7 +1517,7 @@ void SetHomeConfigDir()
     sprintf(homeConfigDir, "%s%s", get_xdg_user_config_home().c_str(), DOT_DIR);
     struct stat s;
     if (stat(homeDataDir, &s) == -1 || !S_ISDIR(s.st_mode))
-	mkdir(homeDataDir, 0755);
+        mkdir(homeDataDir, 0755);
 }
 
 void SetHomeDataDir()
@@ -1516,12 +1525,12 @@ void SetHomeDataDir()
     sprintf(homeDataDir, "%s%s", get_xdg_user_data_home().c_str(), DOT_DIR);
     struct stat s;
     if (stat(homeDataDir, &s) == -1 || !S_ISDIR(s.st_mode))
-	mkdir(homeDataDir, 0755);
+        mkdir(homeDataDir, 0755);
 }
 
 int main(int argc, char** argv)
 {
-    fprintf(stdout, "%s\n", VBA_NAME_AND_SUBVERSION);
+    fprintf(stdout, "%s\n", vba_name_and_subversion);
 
     home = argv[0];
     SetHome(home);
@@ -1645,6 +1654,12 @@ int main(int argc, char** argv)
             // no patch given yet - look for ROMBASENAME.ups
             tmp = (char*)malloc(strlen(filename) + 4 + 1);
             sprintf(tmp, "%s.ups", filename);
+            patchNames[patchNum] = tmp;
+            patchNum++;
+
+            // no patch given yet - look for ROMBASENAME.bps
+            tmp = (char*)malloc(strlen(filename) + 4 + 1);
+            sprintf(tmp, "%s.bps", filename);
             patchNames[patchNum] = tmp;
             patchNum++;
 
@@ -2012,6 +2027,10 @@ void systemDrawScreen()
     }
 }
 
+void systemSendScreen()
+{
+}
+
 void systemSetTitle(const char* title)
 {
     SDL_SetWindowTitle(window, title);
@@ -2118,7 +2137,7 @@ void systemScreenCapture(int a)
     }
 
     if (result)
-	systemScreenMessage("Screen capture");
+        systemScreenMessage("Screen capture");
 
     freeSafe(gameFile);
     freeSafe(gameDir);

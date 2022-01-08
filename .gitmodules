@@ -1,6 +1,8 @@
 [submodule "dependencies"]
 	path = dependencies
 	url = https://github.com/visualboyadvance-m/dependencies.git
+	branch = master
 [submodule "RAInterface"]
 	path = RAInterface
 	url = https://github.com/RetroAchievements/RAInterface.git
+	branch = master

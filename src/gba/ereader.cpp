@@ -232,13 +232,13 @@ void BIOS_EReader_ScanCard(int swi_num)
 
         const char* loadDotCodeFile = GetLoadDotCodeFile();
 
-        if (loadDotCodeFile == 0) {
+        if (!*loadDotCodeFile) {
             reg[0].I = 0x301;
             return;
         }
-        f = fopen(loadDotCodeFile, "rb");
-        //f=fopen(filebuffer,"rb");
-        //f=fopen("dotcode4.raw","rb");
+        f = utilOpenFile(loadDotCodeFile, "rb");
+        //f=utilOpenFile(filebuffer,"rb");
+        //f=utilOpenFile("dotcode4.raw","rb");
         if (f == NULL) {
             reg[0].I = 0x303;
             return;
@@ -456,7 +456,7 @@ void BIOS_EReader_ScanCard(int swi_num)
             THUMB_PREFETCH
     } else if ((swi_num == 0xE3) || (swi_num == 0xE5)) //Dotcode data
     {
-        if ((reg[0].I >= 0) && (reg[0].I <= 0x10)) {
+        if (reg[0].I <= 0x10) {
             if (decodestate == 0) {
                 for (i = 0x17; i >= 0; i--) {
                     if ((0x17 - i) < 8)
@@ -502,7 +502,7 @@ void BIOS_EReader_ScanCard(int swi_num)
                     }
                     if (swi_num == 0xE3) {
                         const char* loadDotCodeFile = GetLoadDotCodeFile();
-                        f = fopen(loadDotCodeFile, "rb+");
+                        f = utilOpenFile(loadDotCodeFile, "rb+");
                         if (f != NULL) {
                             fwrite(dotcodedata, 1, j, f);
                             fclose(f);
@@ -510,7 +510,7 @@ void BIOS_EReader_ScanCard(int swi_num)
                     } else {
                         const char* saveDotCodeFile = GetSaveDotCodeFile();
                         if (saveDotCodeFile) {
-                            f = fopen(saveDotCodeFile, "wb");
+                            f = utilOpenFile(saveDotCodeFile, "wb");
                             if (f != NULL) {
                                 fwrite(dotcodedata, 1, j, f);
                                 fwrite(Signature, 1, 0x28, f);

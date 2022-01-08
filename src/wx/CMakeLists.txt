@@ -4,26 +4,29 @@ if(COMMAND cmake_policy)
     cmake_policy(SET CMP0003 NEW) # link to full path of libs
     cmake_policy(SET CMP0005 NEW) # escapes in add_definitions
 
+
+    if(POLICY CMP0074)
+        cmake_policy(SET CMP0074 NEW) # use Package_ROOT if set
+    endif()
+
     if(POLICY CMP0077)
         cmake_policy(SET CMP0077 NEW) # use vars for options
     endif()
 
-    if(NOT CMAKE_VERSION VERSION_LESS 3.0)
+    if(POLICY CMP0043)
         cmake_policy(SET CMP0043 NEW) # for wxWidgets, use generator expressions
     endif()
 endif()
 
 include(VbamFunctions)
 
+set(VBAM_LIBS ${VBAMCORE_LIBS})
+
 if(WIN32)
     # not yet implemented
     option(ENABLE_DIRECT3D "Enable Direct3D rendering for the wxWidgets port" OFF)
 
-    if(NOT CMAKE_TOOLCHAIN_FILE MATCHES vcpkg)
-        option(ENABLE_XAUDIO2 "Enable xaudio2 sound output for the wxWidgets port" ON)
-    else()
-        option(ENABLE_XAUDIO2 "Enable xaudio2 sound output for the wxWidgets port" OFF)
-    endif()
+    option(ENABLE_XAUDIO2 "Enable xaudio2 sound output for the wxWidgets port" ON)
 endif()
 
 option(ENABLE_FAUDIO "Enable FAudio sound output for the wxWidgets port" OFF)
@@ -46,6 +49,8 @@ if(ENABLE_OPENAL)
 	if(OPENAL_STATIC OR (WIN32 AND ((NOT (MINGW AND MSYS)) OR CMAKE_TOOLCHAIN_FILE MATCHES mxe)))
 		add_definitions(-DAL_LIBTYPE_STATIC)
 	endif()
+
+        list(APPEND VBAM_LIBS ${OPENAL_LIBRARY})
 else()
     add_definitions(-DNO_OAL)
 endif()
@@ -58,18 +63,15 @@ if(NOT ENABLE_XAUDIO2)
     add_definitions(-DNO_XAUDIO2)
 endif()
 
-if(NOT ENABLE_FAUDIO)
-    add_definitions(-DNO_FAUDIO)
-endif()
-
 if(NOT ENABLE_DIRECT3D)
     add_definitions(-DNO_D3D)
 endif()
 
-unset(FAUDIO_LIBS)
 if(ENABLE_FAUDIO)
     find_package(FAudio REQUIRED)
-    set(FAUDIO_LIBS FAudio)
+    list(APPEND VBAM_LIBS FAudio)
+else()
+    add_definitions(-DNO_FAUDIO)
 endif()
 
 # on unix we have to check for X11 before we overwrite all the compile/link
@@ -77,45 +79,96 @@ endif()
 if(NOT WIN32 AND NOT APPLE)
     find_package(X11)
 
-    if(X11_X11_LIB AND X11_Xscreensaver_LIB)
+    if(X11_X11_LIB)
         include_directories(${X11_INCLUDE_DIR})
-        set(EXTRA_X11_LIBS ${X11_X11_LIB} ${X11_Xscreensaver_LIB})
+        list(APPEND VBAM_LIBS ${X11_X11_LIB})
+    endif()
+    if(X11_Xscreensaver_LIB)
+        list(APPEND VBAM_LIBS ${X11_Xscreensaver_LIB})
         add_definitions(-DHAVE_XSS)
     endif()
 endif()
 
 # on VS with vcpkg we can't use FindwxWidgets, we have to set everything up
 # manually because the package is broken
-if(WIN32 AND CMAKE_TOOLCHAIN_FILE MATCHES vcpkg AND (X86_32 OR AMD64))
+if(WIN32 AND CMAKE_TOOLCHAIN_FILE MATCHES vcpkg AND (X86_32 OR X86_64))
     # set up wxwidgets stuff
     set(libtype u)
-    set(suffix -rel)
+    unset(arch_suffix)
     unset(path_prefix)
+    set(build_suffix -rel)
 
     if(CMAKE_BUILD_TYPE MATCHES Debug)
         set(libtype ud)
-        set(suffix -dbg)
         set(path_prefix debug)
+        set(build_suffix -dbg)
 
         add_definitions(-D_DEBUG)
     endif()
 
-    add_definitions(-D_UNICODE -DUNICODE -DWXUSINGDLL -DwxUSE_GUI=1 -D__WXMSW__)
-    include_directories(${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows/${path_prefix}/lib/msw${libtype})
-    include_directories(${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows/include)
-    set(wxWidgets_LIB_DIR ${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows/${path_prefix}/lib)
+    set(build_suffix_rel -rel)
+    set(build_suffix_dbg -dbg)
+
+    if(VCPKG_TARGET_TRIPLET MATCHES -static)
+        set(arch_suffix  -static)
+
+        set(build_suffix_rel -static-rel)
+        set(build_suffix_dbg -static-dbg)
+
+        set(build_suffix -static${build_suffix})
+    else()
+        add_definitions(-DWXUSINGDLL)
+    endif()
+
+    add_definitions(-D_UNICODE -DUNICODE -DwxUSE_GUI=1 -D__WXMSW__)
+
+    set(common_prefix    ${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows${arch_suffix})
+    set(dbg_prefix       ${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows${arch_suffix}/debug)
+    set(installed_prefix ${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows${arch_suffix}/${path_prefix})
+
+    set(build_prefix_rel ${_VCPKG_ROOT_DIR}/buildtrees/wxwidgets/${WINARCH}-windows${build_suffix_rel})
+    set(build_prefix_dbg ${_VCPKG_ROOT_DIR}/buildtrees/wxwidgets/${WINARCH}-windows${build_suffix_dbg})
+
+    set(build_prefix     ${_VCPKG_ROOT_DIR}/buildtrees/wxwidgets/${WINARCH}-windows${build_suffix})
+
+    include_directories(${installed_prefix}/lib/msw${libtype})
+    include_directories(${common_prefix}/include)
+    set(wxWidgets_LIB_DIR ${installed_prefix}/lib)
     set(wxWidgets_LIBRARIES
         ${wxWidgets_LIB_DIR}/wxbase31${libtype}_net.lib
         ${wxWidgets_LIB_DIR}/wxbase31${libtype}_xml.lib
         ${wxWidgets_LIB_DIR}/wxmsw31${libtype}_core.lib
         ${wxWidgets_LIB_DIR}/wxmsw31${libtype}_gl.lib
         ${wxWidgets_LIB_DIR}/wxmsw31${libtype}_xrc.lib
+        ${wxWidgets_LIB_DIR}/wxmsw31${libtype}_html.lib
         ${wxWidgets_LIB_DIR}/wxbase31${libtype}.lib
         winmm comctl32 oleacc rpcrt4 shlwapi version wsock32 opengl32
     )
 
-    file(COPY ${_VCPKG_ROOT_DIR}/buildtrees/wxwidgets/${WINARCH}-windows${suffix}/lib/wxrc.exe DESTINATION ${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows/${path_prefix}/bin)
-    set(WXRC ${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows/${path_prefix}/bin/wxrc.exe)
+    if(EXISTS ${wxWidgets_LIB_DIR}/wxregex${libtype}.lib)
+        list(APPEND wxWidgets_LIBRARIES ${wxWidgets_LIB_DIR}/wxregex${libtype}.lib)
+    endif()
+
+    if(VCPKG_TARGET_TRIPLET MATCHES -static)
+        unset(deb_suffix)
+        if(CMAKE_BUILD_TYPE MATCHES Debug)
+            set(deb_suffix d)
+        endif()
+
+        file(GLOB png_lib ${wxWidgets_LIB_DIR}/libpng*.lib)
+
+        list(APPEND wxWidgets_LIBRARIES
+            ${wxWidgets_LIB_DIR}/jpeg${deb_suffix}.lib
+            ${wxWidgets_LIB_DIR}/tiff${deb_suffix}.lib
+            ${wxWidgets_LIB_DIR}/lzma${deb_suffix}.lib
+            ${wxWidgets_LIB_DIR}/libexpat${deb_suffix}MD.lib
+            ${png_lib}
+        )
+    endif()
+
+    set(WXRC ${common_prefix}/tools/wxwidgets/wxrc.exe)
+
+    set(ENV{PATH} "${dbg_prefix}/bin;${common_prefix}/bin;$ENV{PATH}")
 
     if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/zip.exe)
         # get zip binary for wxrc
@@ -124,11 +177,22 @@ if(WIN32 AND CMAKE_TOOLCHAIN_FILE MATCHES vcpkg AND (X86_32 OR AMD64))
         execute_process(
             COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('${CMAKE_CURRENT_BINARY_DIR}/infozip_binaries_win32.zip', '${CMAKE_CURRENT_BINARY_DIR}'); }"
         )
+
+        set(ZIP_PROGRAM ${CMAKE_CURRENT_BINARY_DIR}/zip.exe CACHE STRING "zip compressor executable" FORCE)
     endif()
 
     # SDL2.dll does not get copied to build dir
-    if(NOT EXISTS ${CMAKE_BINARY_DIR}/SDL2.dll)
-        file(COPY ${_VCPKG_ROOT_DIR}/installed/${WINARCH}-windows/bin/SDL2.dll DESTINATION ${CMAKE_BINARY_DIR})
+    if(NOT VCPKG_TARGET_TRIPLET MATCHES -static)
+        unset(deb_suffix)
+        if(CMAKE_BUILD_TYPE MATCHES Debug)
+            set(deb_suffix d)
+        endif()
+
+        set(dll_path ${installed_prefix}/bin/SDL2${deb_suffix}.dll)
+
+        if(NOT EXISTS ${CMAKE_BINARY_DIR}/SDL2${deb_suffix}.dll AND EXISTS ${dll_path})
+            file(COPY ${dll_path} DESTINATION ${CMAKE_BINARY_DIR})
+        endif()
     endif()
 else()
     if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -139,10 +203,6 @@ else()
     #if(WIN32 AND (CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL Clang))
     #    set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -luuid -lwinspool")
     #endif()
-
-    if(CMAKE_PREFIX_PATH)
-        set(wxWidgets_CONFIG_OPTIONS "--prefix=${CMAKE_PREFIX_PATH}")
-    endif()
 
     set(wxWidgets_USE_UNICODE ON)
 
@@ -221,7 +281,8 @@ else()
 
     if((CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID STREQUAL Clang)
         AND NOT CMAKE_CROSSCOMPILING
-        AND NOT CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
+        AND NOT CMAKE_SYSTEM_NAME STREQUAL FreeBSD
+        AND NOT TRANSLATIONS_ONLY)
 
         set(ABI_CHECK TRUE)
     endif()
@@ -313,7 +374,7 @@ int main(int argc, char** argv)
             set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS} -fpermissive -w "-I${CMAKE_SOURCE_DIR}/dependencies/minhook/include")
             set(CMAKE_REQUIRED_LIBRARIES   ${CMAKE_REQUIRED_LIBRARIES}   -Wl,--subsystem,console)
 
-            if(AMD64)
+            if(X86_64)
                 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} "${CMAKE_SOURCE_DIR}/dependencies/minhook/libMinHook_64.a")
             else() # assume 32 bit windows
                 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} "${CMAKE_SOURCE_DIR}/dependencies/minhook/libMinHook.a")
@@ -413,7 +474,7 @@ int main(int argc, char** argv) {
             include_directories(${GTK4_INCLUDE_DIRS})
             link_directories(${GTK4_LIBRARY_DIRS})
             add_compile_options(${GTK4_CFLAGS_OTHER})
-            set(GTK_LIBRARIES ${GTK4_LIBRARIES})
+            list(APPEND VBAM_LIBS ${GTK4_LIBRARIES})
         elseif(WX_USING_GTK3)
             pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
             if(NOT GTK3_INCLUDE_DIRS)
@@ -422,7 +483,7 @@ int main(int argc, char** argv) {
             include_directories(${GTK3_INCLUDE_DIRS})
             link_directories(${GTK3_LIBRARY_DIRS})
             add_compile_options(${GTK3_CFLAGS_OTHER})
-            set(GTK_LIBRARIES ${GTK3_LIBRARIES})
+            list(APPEND VBAM_LIBS ${GTK3_LIBRARIES})
         else()
             check_cxx_symbol_exists(__WXGTK20__ ${WX_CONFIG_H} WX_USING_GTK2)
             if(WX_USING_GTK2)
@@ -432,7 +493,7 @@ int main(int argc, char** argv) {
                     include_directories(${GTK2_INCLUDE_DIRS})
                     link_directories(${GTK2_LIBRARY_DIRS})
                     add_compile_options(${GTK2_CFLAGS_OTHER})
-                    set(GTK_LIBRARIES ${GTK2_LIBRARIES})
+                    list(APPEND VBAM_LIBS ${GTK2_LIBRARIES})
                 else()
                     # and if that fails, use the cmake module
                     find_package(GTK2 REQUIRED gtk)
@@ -441,7 +502,7 @@ int main(int argc, char** argv) {
                     endif()
                     include_directories(${GTK2_INCLUDE_DIRS})
                     add_compile_options(${GTK2_DEFINITIONS})
-                    set(GTK_LIBRARIES ${GTK2_LIBRARIES})
+                    list(APPEND VBAM_LIBS ${GTK2_LIBRARIES})
                 endif()
             else()
                 find_package(GTK REQUIRED gtk)
@@ -450,6 +511,7 @@ int main(int argc, char** argv) {
                 endif()
                 include_directories(${GTK_INCLUDE_DIRS})
                 add_compile_options(${GTK_DEFINITIONS})
+                list(APPEND VBAM_LIBS ${GTK_LIBRARIES})
             endif()
         endif()
     endif()
@@ -459,16 +521,40 @@ int main(int argc, char** argv) {
     endif()
 endif() # wxWidgets checks
 
-if(CMAKE_TOOLCHAIN_FILE MATCHES vcpkg)
-    find_package(unofficial-gettext REQUIRED)
-else()
+if(ENABLE_NLS)
+    if(MSVC)
+        # Install gettext tools from nuget.
+
+        # First fetch the nuget binary.
+        if(NOT EXISTS ${CMAKE_BINARY_DIR}/nuget.exe)
+            file(DOWNLOAD "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" ${CMAKE_BINARY_DIR}/nuget.exe)
+        endif()
+
+        # Add nuget package source.
+        execute_process(
+            COMMAND nuget sources add -Name "NuGet official package source" -Source "https://api.nuget.org/v3/index.json"
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+
+        # Install the Gettext.Tools package.
+        execute_process(
+            COMMAND nuget.exe install Gettext.Tools -OutputDirectory ${CMAKE_BINARY_DIR}/nuget
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+
+        # Find the path to the binaries in the package and add them to find path.
+        file(GLOB pkg ${CMAKE_BINARY_DIR}/nuget/Gettext.Tools*)
+
+        list(APPEND CMAKE_PROGRAM_PATH ${pkg}/tools/bin)
+    endif()
+
     find_package(Gettext REQUIRED)
 
     find_program(XGETTEXT xgettext)
-    find_program(MSGINIT msginit)
+    find_program(MSGINIT  msginit)
 
-    if(ENABLE_NLS AND (NOT XGETTEXT OR NOT MSGINIT))
-       message(SEND_ERROR "Cannot find gettext ${XGETTEXT} ${MSGINIT}")
+    if(NOT XGETTEXT OR NOT MSGINIT)
+        message(SEND_ERROR "Cannot find gettext xgettext:'${XGETTEXT}' msginit:'${MSGINIT}'")
     endif()
 endif()
 
@@ -479,64 +565,67 @@ include_directories(widgets)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-set(XRC_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/AccelConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/CheatAdd.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/CheatCreate.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/CheatEdit.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/CheatList.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/CodeSelect.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/DirectoriesConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/Disassemble.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/DisplayConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/ExportSPS.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBAROMInfo.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBColorPrefPanel.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBDisassemble.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBMapViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBOAMViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBPaletteViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBPrinter.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBROMInfo.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GBTileViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GameBoyAdvanceConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GameBoyConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/GeneralConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/IOViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/JoyPanel.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/JoypadConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/LinkConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/Logging.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/MainFrame.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/MainIcon.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/MainMenu.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/MapViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/MemSelRegion.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/MemViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/NetLink.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/OAMViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/PaletteViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/SoundConfig.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/TileViewer.xrc
-    ${CMAKE_CURRENT_SOURCE_DIR}/xrc/SpeedupConfig.xrc
-    )
+find_program(ZIP_PROGRAM zip DOC "zip compressor executable")
+
+if(NOT ZIP_PROGRAM)
+    message(FATAL_ERROR "The zip compressor program is required for building.")
+endif()
+
+set(
+    XRC_SOURCES
+    xrc/AccelConfig.xrc
+    xrc/CheatAdd.xrc
+    xrc/CheatCreate.xrc
+    xrc/CheatEdit.xrc
+    xrc/CheatList.xrc
+    xrc/CodeSelect.xrc
+    xrc/DirectoriesConfig.xrc
+    xrc/Disassemble.xrc
+    xrc/DisplayConfig.xrc
+    xrc/ExportSPS.xrc
+    xrc/GBAROMInfo.xrc
+    xrc/GBColorPrefPanel.xrc
+    xrc/GBDisassemble.xrc
+    xrc/GBMapViewer.xrc
+    xrc/GBOAMViewer.xrc
+    xrc/GBPaletteViewer.xrc
+    xrc/GBPrinter.xrc
+    xrc/GBROMInfo.xrc
+    xrc/GBTileViewer.xrc
+    xrc/GameBoyAdvanceConfig.xrc
+    xrc/GameBoyConfig.xrc
+    xrc/GeneralConfig.xrc
+    xrc/IOViewer.xrc
+    xrc/JoyPanel.xrc
+    xrc/JoypadConfig.xrc
+    xrc/LinkConfig.xrc
+    xrc/Logging.xrc
+    xrc/MainFrame.xrc
+    xrc/MainIcon.xrc
+    xrc/MainMenu.xrc
+    xrc/MapViewer.xrc
+    xrc/MemSelRegion.xrc
+    xrc/MemViewer.xrc
+    xrc/NetLink.xrc
+    xrc/OAMViewer.xrc
+    xrc/PaletteViewer.xrc
+    xrc/SoundConfig.xrc
+    xrc/TileViewer.xrc
+    xrc/SpeedupConfig.xrc
+    xrc/UIConfig.xrc
+)
 
 # wxrc does not support xrs files in -c output (> 10x compression)
 # we do it using the bin2c.c utility
 
-set(BIN2C ${CMAKE_BINARY_DIR}/bin2c)
-
-if(NOT MSVC)
-	include(HostCompile)
-	host_compile(${CMAKE_CURRENT_SOURCE_DIR}/bin2c.c ${BIN2C})
-	set(BIN2C_DEP ${BIN2C})
+if(CMAKE_CROSSCOMPILING)
+    set(BIN2C ${CMAKE_BINARY_DIR}/bin2c)
 else()
-	# on the appveyor visual studio environment, cl.exe cannot be run from
-	# cmake
-	add_executable(bin2c ${CMAKE_CURRENT_SOURCE_DIR}/bin2c.c)
-	set(BIN2C     bin2c)
-	set(BIN2C_DEP bin2c)
+    set(BIN2C bin2c)
 endif()
+
+include(HostCompile)
+host_compile(${CMAKE_CURRENT_SOURCE_DIR}/bin2c.c ${BIN2C})
 
 if(WXRC)
     separate_arguments(WXRC UNIX_COMMAND ${WXRC})
@@ -591,36 +680,24 @@ if(NOT WXRC)
     set(WXRC wxrc)
 endif()
 
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL CYGWIN)
-    # pass xrc sources through cygpath in case we only have native wxrc
-    set(new_xrc_sources)
-
-    foreach(xrc ${XRC_SOURCES})
-        execute_process(COMMAND cygpath -m ${xrc} OUTPUT_VARIABLE win_path OUTPUT_STRIP_TRAILING_WHITESPACE)
-        list(APPEND new_xrc_sources ${win_path})
-    endforeach()
-
-    set(XRC_SOURCES ${new_xrc_sources})
-endif()
-
 add_custom_command(
-    OUTPUT wxvbam.xrs
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    COMMAND ${WXRC} ${XRC_SOURCES} "--output=wxvbam.xrs"
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/wxvbam.xrs
+    COMMAND ${CMAKE_COMMAND} -E env "PATH=$ENV{PATH}" ${WXRC} ${XRC_SOURCES} -o ${CMAKE_CURRENT_BINARY_DIR}/wxvbam.xrs
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS ${XRC_SOURCES}
 )
 
 add_custom_command(
     OUTPUT builtin-xrc.h
     COMMAND ${BIN2C} wxvbam.xrs builtin-xrc.h builtin_xrs
-    DEPENDS wxvbam.xrs ${BIN2C_DEP}
+    DEPENDS wxvbam.xrs ${BIN2C}
 )
 
 # use a built-in vba-over.ini if no config file present
 add_custom_command(
     OUTPUT builtin-over.h
     COMMAND ${BIN2C} ${CMAKE_CURRENT_SOURCE_DIR}/../vba-over.ini builtin-over.h builtin_over
-    DEPENDS ../vba-over.ini ${BIN2C_DEP}
+    DEPENDS ../vba-over.ini ${BIN2C}
 )
 
 # I don't like duplicating/triplicating code, so I only declare
@@ -641,6 +718,7 @@ add_custom_command(
 set(
     SRC_WX
     wxvbam.cpp
+    background-input.cpp
     guiinit.cpp
     viewers.cpp
     gfxviewers.cpp
@@ -651,6 +729,7 @@ set(
     viewsupt.cpp
     wayland.cpp
     strutils.cpp
+    wxutil.cpp
     widgets/keyedit.cpp
     widgets/joyedit.cpp
     widgets/sdljoy.cpp
@@ -659,24 +738,22 @@ set(
     ../sdl/text.cpp
     # from external source with minor modifications
     widgets/checkedlistctrl.cpp
-    # generated
-    cmdtab.cpp
-    # generated includes must be explicitly listed
-    builtin-xrc.h
-    builtin-over.h
-    cmdhandlers.h
-    cmd-evtable.h
-    # icon File
-    xrc/vbam.xpm
+    ../common/version.cpp
 )
 
+set(ALL_SRC_WX ${SRC_WX})
+
+list(APPEND ALL_SRC_WX ${CMAKE_CURRENT_SOURCE_DIR}/macsupport.mm)
+
 if(APPLE)
-    set(SRC_WX ${SRC_WX} macsupport.mm)
+    list(APPEND SRC_WX ${CMAKE_CURRENT_SOURCE_DIR}/macsupport.mm)
 endif()
 
 set(
     HDR_WX
     wxvbam.h
+    background-input.h
+    wxlogdebug.h
     drawing.h
     filters.h
     ioregs.h
@@ -684,6 +761,7 @@ set(
     viewsupt.h
     wxhead.h
     wayland.h
+    wxutil.h
     widgets/wx/keyedit.h
     widgets/wx/joyedit.h
     widgets/wx/sdljoy.h
@@ -693,6 +771,9 @@ set(
     ../sdl/text.h
     # from external source with minor modifications
     widgets/wx/checkedlistctrl.h
+    ../common/version_cpp.h
+    ../common/range.hpp
+    ../common/contains.h
 )
 
 option(ENABLE_RETROACHIEVEMENTS "Enable RetroAchievements" OFF)
@@ -702,10 +783,48 @@ if (ENABLE_RETROACHIEVEMENTS)
     set(HDR_WX ${HDR_WX} retroachievements.h ../../RAInterface/RA_Interface.cpp)
 endif()
 
+set(ALL_HDR_WX ${HDR_WX})
+# make files included for gettext pot generation
+list(APPEND ALL_SRC_WX autoupdater/wxmsw/autoupdater.cpp)
+list(APPEND ALL_HDR_WX autoupdater/autoupdater.h)
+list(APPEND ALL_SRC_WX autoupdater/wxmsw/winsparkle-wrapper.cpp)
+list(APPEND ALL_HDR_WX autoupdater/wxmsw/winsparkle-wrapper.h)
+list(APPEND ALL_HDR_WX autoupdater/wxmsw/winsparkle-rc.h)
+
+if(WIN32 AND (X86_64 OR X86_32) AND ENABLE_ONLINEUPDATES)
+    list(APPEND SRC_WX autoupdater/wxmsw/autoupdater.cpp)
+    list(APPEND HDR_WX autoupdater/autoupdater.h)
+    list(APPEND SRC_WX autoupdater/wxmsw/winsparkle-wrapper.cpp)
+    list(APPEND HDR_WX autoupdater/wxmsw/winsparkle-wrapper.h)
+    list(APPEND HDR_WX autoupdater/wxmsw/winsparkle-rc.h)
+endif()
+
+# make files included for gettext pot generation
+list(APPEND ALL_HDR_WX autoupdater/autoupdater.h)
+list(APPEND ALL_SRC_WX autoupdater/macos/autoupdater.cpp)
+list(APPEND ALL_SRC_WX autoupdater/macos/sparkle-wrapper.mm)
+list(APPEND ALL_HDR_WX autoupdater/macos/sparkle-wrapper.h)
+
+if(APPLE AND ENABLE_ONLINEUPDATES)
+    list(APPEND HDR_WX autoupdater/autoupdater.h)
+    list(APPEND SRC_WX autoupdater/macos/autoupdater.cpp)
+    list(APPEND SRC_WX autoupdater/macos/sparkle-wrapper.mm)
+    list(APPEND HDR_WX autoupdater/macos/sparkle-wrapper.h)
+endif()
+
 set(
     RES_WX
     ${XRC_SOURCES}
     ../vba-over.ini
+    # icon File
+    xrc/visualboyadvance-m.xpm
+    # generated includes must be explicitly listed
+    ${CMAKE_CURRENT_BINARY_DIR}/builtin-xrc.h
+    ${CMAKE_CURRENT_BINARY_DIR}/builtin-over.h
+    ${CMAKE_CURRENT_BINARY_DIR}/cmdhandlers.h
+    ${CMAKE_CURRENT_BINARY_DIR}/cmd-evtable.h
+    # generated
+    ${CMAKE_CURRENT_BINARY_DIR}/cmdtab.cpp
 )
 
 set(
@@ -713,35 +832,39 @@ set(
     copy-events.cmake
 )
 
+list(APPEND ALL_SRC_WX openal.cpp)
+list(APPEND ALL_HDR_WX openal.h)
+
 if(ENABLE_OPENAL)
-    set(SRC_WX ${SRC_WX} openal.cpp)
-    set(HDR_WX ${HDR_WX} openal.h)
+   list(APPEND SRC_WX openal.cpp)
+   list(APPEND HDR_WX openal.h)
 endif()
+
+list(APPEND ALL_SRC_WX xaudio2.cpp)
 
 if(ENABLE_XAUDIO2)
-    set(SRC_WX ${SRC_WX} xaudio2.cpp)
+   list(APPEND SRC_WX xaudio2.cpp)
 endif()
+
+list(APPEND ALL_SRC_WX faudio.cpp)
 
 if(ENABLE_FAUDIO)
-    set(SRC_WX ${SRC_WX} faudio.cpp)
+   list(APPEND SRC_WX faudio.cpp)
 endif()
 
+list(APPEND ALL_SRC_WX dsound.cpp)
+
 if(WIN32)
-    set(SRC_WX ${SRC_WX} wxvbam.rc dsound.cpp)
-    set(DIRECTX_LIBRARIES dxguid dsound ws2_32)
-    if(MSVC)
-        # workaround for some symbols needed by static SDL2.lib
-        set(DIRECTX_LIBRARIES ${DIRECTX_LIBRARIES} imm32 version)
-    endif()
-    # not strictly directx, but win32-related
-    if(ENABLE_DEBUGGER)
-        set(DIRECTX_LIBRARIES ${DIRECTX_LIBRARIES} wsock32)
-    endif()
+    list(APPEND SRC_WX dsound.cpp)
+
+    list(APPEND RES_WX wxvbam.rc)
+
+    list(APPEND VBAM_LIBS dxguid dsound wsock32 ws2_32 imm32 version)
 endif()
 
 link_directories(${CMAKE_BINARY_DIR})
 
-set(VBAM_ICON vbam.icns)
+set(VBAM_ICON visualboyadvance-m.icns)
 
 set(VBAM_ICON_PATH ${CMAKE_CURRENT_SOURCE_DIR}/icons/${VBAM_ICON})
 
@@ -750,36 +873,166 @@ if(APPLE)
     set(CMAKE_INSTALL_RPATH "@loader_path/../Frameworks")
 endif()
 
-add_executable(
-    visualboyadvance-m
-    WIN32
-    MACOSX_BUNDLE
-    ${SRC_WX}
-    ${HDR_WX}
-    ${RES_WX}
-    ${VBAM_ICON_PATH}
-    ${CM_STUFF}
-)
-
-
-target_link_libraries(
-    visualboyadvance-m
-    ${VBAMCORE_LIBS}
-    ${wxWidgets_LIBRARIES}
-    ${FFMPEG_LIBRARIES}
-    ${DIRECTX_LIBRARIES}
-    ${GTK_LIBRARIES}
-    ${OPENAL_LIBRARY}
-    ${FAUDIO_LIBS}
-    ${EXTRA_X11_LIBS}
-)
-
-if(ENABLE_FFMPEG)
-    join("${FFMPEG_LDFLAGS}" " " FFMPEG_LDFLAGS_STR)
-
-    set_target_properties(
+if(NOT TRANSLATIONS_ONLY)
+    add_executable(
         visualboyadvance-m
-        PROPERTIES LINK_FLAGS ${FFMPEG_LDFLAGS_STR}
+        WIN32
+        MACOSX_BUNDLE
+        ${SRC_WX}
+        ${HDR_WX}
+        ${RES_WX}
+        ${VBAM_ICON_PATH}
+        ${CM_STUFF}
+    )
+
+    if(WIN32 AND (X86_64 OR X86_32) AND ENABLE_ONLINEUPDATES)
+        if(NOT DEFINED WINSPARKLE_BIN_RELEASE_DIR)
+            set(WINSPARKLE_BIN_RELEASE_DIR ${CMAKE_SOURCE_DIR}/dependencies/WinSparkle-0.6.0)
+        endif()
+
+        target_include_directories(
+            visualboyadvance-m
+            PRIVATE ${WINSPARKLE_BIN_RELEASE_DIR}/include
+        )
+
+        if(X86_64)
+            set(WINSPARKLE_DLL ${CMAKE_SOURCE_DIR}/dependencies/WinSparkle-0.6.0/x64/Release/WinSparkle.dll)
+        else()
+            set(WINSPARKLE_DLL ${CMAKE_SOURCE_DIR}/dependencies/WinSparkle-0.6.0/Release/WinSparkle.dll)
+        endif()
+
+        configure_file(autoupdater/wxmsw/winsparkle-path.h.in ${CMAKE_BINARY_DIR}/winsparkle-path.h)
+    endif()
+
+    if(APPLE AND ENABLE_ONLINEUPDATES)
+
+        include(FetchContent)
+        FetchContent_Declare(Sparkle
+            URL "https://github.com/sparkle-project/Sparkle/releases/download/1.23.0/Sparkle-1.23.0.tar.bz2"
+            URL_HASH SHA512=fa7e9736d4319bf839cd5e11177d1ddac78c38048be7e59b5c94ea76c9ffc02919dd17890295d21b7f0e35afe0ec9aba9ba36912caed6e5017420345f9f66682
+        )
+        FetchContent_MakeAvailable(Sparkle)
+
+        find_library(SPARKLE_FRAMEWORK
+          NAMES Sparkle
+          HINTS ${sparkle_SOURCE_DIR}
+        )
+        find_path(SPARKLE_INCLUDE_DIR Sparkle.h HINTS ${SPARKLE_FRAMEWORK}/Headers)
+        target_include_directories(
+            visualboyadvance-m
+            PRIVATE ${SPARKLE_INCLUDE_DIR}
+        )
+
+        set(APPCAST_URL "https://data.vba-m.com/appcast.xml")
+        set(CCS1 mkdir -p ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Frameworks)
+        # The following commands *should* be run to make sure Sparkle is not going
+        # to bug randomly (version=1.23)
+        set(CCS2 cp -a ${SPARKLE_FRAMEWORK} ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Frameworks/Sparkle.framework)
+        set(CCS3 defaults write ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Info.plist CFBundleVersion            -string "${VERSION}")
+        set(CCS4 defaults write ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Info.plist CFBundleShortVersionString -string "${VERSION}")
+        set(CCS5 defaults write ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Info.plist SUEnableAutomaticChecks -bool YES)
+        #set(CCS6 defaults write ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Info.plist SUPublicEDKey -string "${PUBLIC_KEY}")
+        set(CCS7 defaults write ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Info.plist SUFeedURL -string "${APPCAST_URL}")
+        add_custom_command(TARGET visualboyadvance-m POST_BUILD
+          COMMAND ${CCS1}
+          COMMAND ${CCS2}
+          COMMAND ${CCS3}
+          COMMAND ${CCS4}
+          COMMAND ${CCS5}
+          #COMMAND ${CCS6}
+          COMMAND ${CCS7}
+        )
+
+        TARGET_LINK_LIBRARIES(visualboyadvance-m ${SPARKLE_FRAMEWORK})
+    endif()
+
+    target_link_libraries(
+        visualboyadvance-m
+        ${wxWidgets_LIBRARIES}
+        ${VBAM_LIBS}
+    )
+
+    set(WIN32_MEDIA_FOUNDATION_LIBS dxva2 evr mf mfplat mfplay mfreadwrite mfuuid amstrmid)
+
+    if(ENABLE_FFMPEG)
+        if(WIN32)
+            list(APPEND FFMPEG_LIBRARIES secur32 bcrypt ${WIN32_MEDIA_FOUNDATION_LIBS})
+        endif()
+
+        target_link_libraries(
+            visualboyadvance-m
+            ${FFMPEG_LIBRARIES}
+        )
+
+        if(FFMPEG_LDFLAGS)
+            join("${FFMPEG_LDFLAGS}" " " FFMPEG_LDFLAGS_STR)
+
+            set_target_properties(
+                visualboyadvance-m
+                PROPERTIES LINK_FLAGS ${FFMPEG_LDFLAGS_STR}
+            )
+        endif()
+    endif()
+
+    # link libgcc/libstdc++ statically on mingw
+    # and adjust link command when making a static binary
+    if(CMAKE_COMPILER_IS_GNUCXX)
+        if(WIN32)
+            # Build a console app in debug mode on Windows
+            if(CMAKE_BUILD_TYPE MATCHES Debug)
+                set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -Wl,--subsystem,console")
+            else()
+                set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -Wl,--subsystem,windows")
+            endif()
+        endif()
+
+        if(VBAM_STATIC)
+            # some dists don't have a static libpthread
+            set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread ")
+
+            if(WIN32)
+                add_custom_command(
+                    TARGET visualboyadvance-m PRE_LINK
+                    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/msys-link-static.cmake
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                )
+            else()
+                add_custom_command(
+                    TARGET visualboyadvance-m PRE_LINK
+                    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/link-static.cmake
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                )
+            endif()
+        endif()
+    elseif(MSVC)
+        # the debug lib libcmtd is linked in debug mode, so don't link the normal version
+        set_target_properties(visualboyadvance-m PROPERTIES LINK_FLAGS_DEBUG "/nodefaultlib:libcmt /subsystem:console")
+    endif()
+
+    # Make the app a console app in debug mode to get log messages.
+    if(WIN32 AND CMAKE_BUILD_TYPE MATCHES Debug)
+        target_compile_definitions(visualboyadvance-m PRIVATE -DWIN32_CONSOLE_APP)
+    endif()
+
+
+    if(NOT WIN32 AND NOT APPLE)
+        install(FILES     ${CMAKE_CURRENT_SOURCE_DIR}/visualboyadvance-m.desktop     DESTINATION ${CMAKE_INSTALL_PREFIX}/share/applications)
+        install(FILES     ${CMAKE_CURRENT_SOURCE_DIR}/visualboyadvance-m.appdata.xml DESTINATION ${CMAKE_INSTALL_PREFIX}/share/appdata)
+        install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/icons/sizes/                   DESTINATION ${CMAKE_INSTALL_PREFIX}/share/icons/hicolor)
+    endif()
+endif()
+
+option(TRANSLATIONS_ONLY "Build only the translations.zip" OFF)
+
+# Make the translations.zip for windows builds.
+if(ENABLE_NLS)
+    file(GLOB catalogs ${CMAKE_BINARY_DIR}/po/wxvbam/*.gmo)
+
+    add_custom_target(
+            translations-zip ALL
+            COMMAND ${CMAKE_COMMAND} -D "ZIP_PROGRAM=${ZIP_PROGRAM}" -P ${CMAKE_CURRENT_SOURCE_DIR}/make-translations-zip.cmake
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            DEPENDS translations make-translations-zip.cmake ${catalogs}
     )
 endif()
 
@@ -799,68 +1052,256 @@ if (ENABLE_RETROACHIEVEMENTS)
     endif()
 endif()
 
-# link libgcc/libstdc++ statically on mingw
-# and adjust link command when making a static binary
-if(CMAKE_COMPILER_IS_GNUCXX)
-    if(WIN32)
-        # Build a console app in debug mode on Windows
-        if(CMAKE_BUILD_TYPE MATCHES Debug)
-            set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -Wl,--subsystem,console")
-        else()
-            set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -Wl,--subsystem,windows")
-        endif()
-    endif()
+# Update the gettext pot source.
+# Do this automatically instead of manually to make sure we don't forget to update.
+if(ENABLE_NLS)
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/wx-xrc-strings.h
+        COMMAND ${CMAKE_COMMAND} -E env "PATH=$ENV{PATH}" ${WXRC} -g ${XRC_SOURCES} -o ${CMAKE_BINARY_DIR}/wx-xrc-strings.h
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS ${XRC_SOURCES}
+    )
 
-    if(VBAM_STATIC)
-        # some dists don't have a static libpthread
-        set(CMAKE_CXX_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE} -static-libgcc -static-libstdc++ -Wl,-Bstatic -lstdc++ -lpthread ")
+    add_custom_target(xrc-strings DEPENDS ${CMAKE_BINARY_DIR}/wx-xrc-strings.h)
 
-        if(WIN32)
-            add_custom_command(
-                TARGET visualboyadvance-m PRE_LINK
-                COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/msys-link-static.cmake
-                WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-            )
-        else()
-            add_custom_command(
-                TARGET visualboyadvance-m PRE_LINK
-                COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/link-static.cmake
-                WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-            )
-        endif()
-    endif()
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/wxvbam.pot
+        COMMAND ${XGETTEXT} -k_ -kN_ -o ${CMAKE_BINARY_DIR}/wxvbam.pot ${ALL_SRC_WX} ${ALL_HDR_WX} ${CMAKE_BINARY_DIR}/wx-xrc-strings.h
+        DEPENDS ${ALL_SRC_WX} ${ALL_HDR_WX} ${CMAKE_BINARY_DIR}/wx-xrc-strings.h
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    add_custom_target(gettext-pot DEPENDS ${CMAKE_BINARY_DIR}/wxvbam.pot)
+
+    add_dependencies(gettext-pot xrc-strings)
+
+    add_dependencies(translations-zip gettext-pot)
+
+    add_custom_command(
+        TARGET translations-zip
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -D SRC_DIR=${CMAKE_SOURCE_DIR}/po/wxvbam -D BIN_DIR=${CMAKE_BINARY_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/check-pot-updated.cmake
+    )
 endif()
 
-if(WIN32)
-    install(PROGRAMS ${PROJECT_BINARY_DIR}/visualboyadvance-m${CMAKE_EXECUTABLE_SUFFIX} DESTINATION ${CMAKE_BINARY_DIR})
-endif()
+if(NOT TRANSLATIONS_ONLY)
+    find_program(GPG_PROGRAM gpg)
 
-if(NOT WIN32 AND NOT APPLE)
-    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/wxvbam.desktop DESTINATION ${CMAKE_INSTALL_PREFIX}/share/applications)
-endif()
-
-if(APPLE)
-    # this should set ROM file types correctly
-    set_property(TARGET visualboyadvance-m APPEND PROPERTY MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/wxplist.in)
-    set(MACOSX_BUNDLE_ICON_FILE ${VBAM_ICON})
-    set_source_files_properties(${VBAM_ICON_PATH} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-
-    # bundle dylibs and relink them for releasing .app
-    # also install translations into the .app
-    # but only in Release mode
-    if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
-        add_custom_command(
-            TARGET visualboyadvance-m POST_BUILD
-            COMMAND ${CMAKE_SOURCE_DIR}/tools/osx/third_party_libs_tool ./visualboyadvance-m.app
-            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+    if(GPG_PROGRAM)
+        execute_process(
+            COMMAND ${GPG_PROGRAM} -k
+            OUTPUT_VARIABLE GPG_KEYS
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
         )
+    endif()
+
+    option(ZIP_SUFFIX [=[suffix for release zip files, e.g.  "-somebranch".zip]=] OFF)
+
+    if(NOT ZIP_SUFFIX)
+        set(ZIP_SUFFIX "")
+    endif()
+
+    if(UPSTREAM_RELEASE AND WIN32)
+        set(home "$ENV{HOME}")
+
+        if(NOT CMAKE_CROSSCOMPILING AND NOT DEFINED ENV{MSYSTEM_PREFIX})
+            set(home "$ENV{USERPROFILE}")
+        endif()
+
+        # rewrite backslashes to slashes, needed for msys osslsigncode
+        string(REGEX REPLACE "\\\\" "/" home "${home}")
+
+        set(cert "${home}/.codesign/windows_comodo.pkcs12")
+
+        if(EXISTS "${cert}")
+            find_program(OSSLSIGNCODE_PROGRAM osslsigncode)
+            find_program(SIGNTOOL_PROGRAM     signtool)
+
+            if(OSSLSIGNCODE_PROGRAM)
+                add_custom_command(
+                    TARGET visualboyadvance-m
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E rename visualboyadvance-m.exe visualboyadvance-m-unsigned.exe
+                    COMMAND ${OSSLSIGNCODE_PROGRAM} sign -pkcs12 ${cert} -pass "vbam3!13" -t http://timestamp.digicert.com -n visualboyadvance-m -i https://github.com/visualboyadvance-m/visualboyadvance-m -in visualboyadvance-m-unsigned.exe -out visualboyadvance-m.exe
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                    )
+            elseif(SIGNTOOL_PROGRAM)
+                add_custom_command(
+                    TARGET visualboyadvance-m
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy visualboyadvance-m.exe visualboyadvance-m-unsigned.exe
+                    COMMAND ${SIGNTOOL_PROGRAM} sign /f ${cert} /p "vbam3!13" /tr http://timestamp.digicert.com /du https://github.com/visualboyadvance-m/visualboyadvance-m /a visualboyadvance-m.exe
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                    )
+            endif()
+        endif()
+
+        if(CMAKE_BUILD_TYPE MATCHES Debug)
+            set(exezip visualboyadvance-m-Win-${ARCH_NAME}-debug${ZIP_SUFFIX}.zip)
+        else()
+            set(exezip visualboyadvance-m-Win-${ARCH_NAME}${ZIP_SUFFIX}.zip)
+        endif()
+
+        unset(pdb_file)
+
+        if(MSVC AND CMAKE_BUILD_TYPE MATCHES Debug)
+            set(pdb_file visualboyadvance-m.pdb)
+        endif()
 
         add_custom_command(
-            TARGET visualboyadvance-m POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/mac-translations.cmake
+            TARGET visualboyadvance-m
+            POST_BUILD
+            COMMAND ${ZIP_PROGRAM} -9 ${exezip} visualboyadvance-m.exe ${pdb_file}
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
+
+        if(GPG_KEYS)
+            add_custom_command(
+                OUTPUT ${CMAKE_BINARY_DIR}/translations.zip.asc
+                COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_BINARY_DIR}/translations.zip.asc
+    #            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/interactive-pause.cmake
+                COMMAND ${GPG_PROGRAM} --detach-sign -a ${CMAKE_BINARY_DIR}/translations.zip
+                DEPENDS translations-zip
+            )
+
+            add_custom_target(translations-zip-sig DEPENDS ${CMAKE_BINARY_DIR}/translations.zip.asc)
+
+            add_dependencies(visualboyadvance-m translations-zip-sig)
+
+            add_custom_command(
+                TARGET visualboyadvance-m
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E remove ${exezip}.asc
+    #            COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/interactive-pause.cmake
+                COMMAND ${GPG_PROGRAM} --detach-sign -a ${exezip}
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+        endif()
+
+        if(NOT MSVC AND NOT CMAKE_BUILD_TYPE MATCHES Debug)
+            find_program(STRIP_PROGRAM strip)
+
+            if(STRIP_PROGRAM)
+                add_custom_command(
+                    TARGET visualboyadvance-m
+                    POST_BUILD
+                    COMMAND ${STRIP_PROGRAM} visualboyadvance-m.exe
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                )
+            endif()
+        endif()
+    endif()
+
+    if(APPLE)
+        # this should set ROM file types correctly
+        set_property(TARGET visualboyadvance-m APPEND PROPERTY MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/wxplist.in)
+        set(MACOSX_BUNDLE_ICON_FILE ${VBAM_ICON})
+        set_source_files_properties(${VBAM_ICON_PATH} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+
+        # bundle dylibs and relink them for releasing .app
+        # also install translations into the .app
+        # but only in Release mode
+        if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
+            add_custom_command(
+                TARGET visualboyadvance-m POST_BUILD
+                COMMAND ${CMAKE_SOURCE_DIR}/tools/osx/third_party_libs_tool ./visualboyadvance-m.app
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+            )
+
+            add_custom_command(
+                TARGET visualboyadvance-m POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/mac-translations.cmake
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+        endif()
+    endif()
+
+    if(APPLE AND (UPSTREAM_RELEASE OR ENABLE_ONLINEUPDATES))
+        if(NOT CMAKE_BUILD_TYPE MATCHES Debug)
+            find_program(STRIP_PROGRAM strip)
+
+            if(STRIP_PROGRAM)
+                add_custom_command(
+                    TARGET visualboyadvance-m
+                    POST_BUILD
+                    COMMAND ${STRIP_PROGRAM} visualboyadvance-m.app/Contents/MacOS/visualboyadvance-m
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                )
+            endif()
+        endif()
+
+        add_custom_command(
+            TARGET visualboyadvance-m
+            POST_BUILD
+            VERBATIM COMMAND sh -c [=[codesign --sign "Developer ID Application" --force --deep ./visualboyadvance-m.app || :]=]
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        )
+
+        if(EXISTS ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Frameworks)
+            # Sign frameworks individually, like Xcode.
+            file(GLOB frameworks ${CMAKE_BINARY_DIR}/visualboyadvance-m.app/Contents/Frameworks/*)
+            foreach(framework ${frameworks})
+                message(STATUS "Signing framework: " ${framework})
+                add_custom_command(
+                    TARGET visualboyadvance-m
+                    POST_BUILD
+                    VERBATIM COMMAND sh -c "codesign --sign 'Developer ID Application' --force ${framework} || :"
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                )
+            endforeach()
+        endif()
+
+        if(UPSTREAM_RELEASE)
+           if(CMAKE_BUILD_TYPE MATCHES Debug)
+              set(appzip visualboyadvance-m-Mac-${ARCH_NAME}-debug${ZIP_SUFFIX}.zip)
+           else()
+              set(appzip visualboyadvance-m-Mac-${ARCH_NAME}${ZIP_SUFFIX}.zip)
+           endif()
+
+            add_custom_command(
+                TARGET visualboyadvance-m
+                POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E remove ${appzip}
+                COMMAND ${ZIP_PROGRAM} -9yr ${appzip} ./visualboyadvance-m.app
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+
+            if(GPG_KEYS)
+                add_custom_command(
+                    TARGET visualboyadvance-m
+                    POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E remove ${appzip}.asc
+    #                COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/interactive-pause.cmake
+                    COMMAND ${GPG_PROGRAM} --detach-sign -a ${appzip}
+                    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                )
+            endif()
+        endif()
+    endif()
+
+    if(UPSTREAM_RELEASE AND NOT WIN32 AND NOT APPLE AND NOT CMAKE_BUILD_TYPE MATCHES Debug)
+        find_program(STRIP_PROGRAM strip)
+
+        if(STRIP_PROGRAM)
+            add_custom_command(
+                TARGET visualboyadvance-m
+                POST_BUILD
+                COMMAND ${STRIP_PROGRAM} visualboyadvance-m
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            )
+        endif()
+    endif()
+
+    install(
+        TARGETS visualboyadvance-m
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        BUNDLE  DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+
+    if(BUILD_TESTING AND (NOT CMAKE_CROSSCOMPILING))
+        add_subdirectory(tests)
     endif()
 endif()
 
-set(WX_EXE_NAME visualboyadvance-m-wx${CMAKE_EXECUTABLE_SUFFIX})
+# vim:sw=4 et tw=0:

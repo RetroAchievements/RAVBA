@@ -2,6 +2,9 @@
 
 set -e
 
+LANG=C LC_COLLATE=C LC_CTYPE=C LC_MESSAGES=C LC_MONETARY=C LC_NUMERIC=C LC_TIME=C LC_ALL=C
+export LANG LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME LC_ALL
+
 case "$1" in
     -32)
         shift
@@ -10,6 +13,7 @@ case "$1" in
             OPWD=$PWD
             export MSYSTEM=MINGW32
             . /etc/profile || :
+            . ~/.bashrc 2>/dev/null || :
             cd "$OPWD"
         fi
         ;;
@@ -20,6 +24,7 @@ case "$1" in
             OPWD=$PWD
             export MSYSTEM=MINGW64
             . /etc/profile || :
+            . ~/.bashrc 2>/dev/null || :
             cd "$OPWD"
         fi
         ;;
@@ -92,7 +97,7 @@ export TMP_DIR="$BUILD_ROOT/tmp_$$"
 
 BUILD_ENV=$BUILD_ENV$(cat <<'EOF'
 
-# on don't translate prefix and defines by default
+# don't translate prefix and defines by default
 export MSYS2_ARG_CONV_EXCL="-D;/usr;/etc"
 
 EOF
@@ -139,6 +144,8 @@ EOF
     cd "$OPWD"
     target_env_base 2>/dev/null || :
 }
+
+table_line_replace DIST_BUILD_OVERRIDES ninja "python configure.py && ninja -j $NUM_CPUS && cp -af ./ninja \"\$BUILD_ROOT/root/bin\""
 
 table_line_append DIST_PRE_BUILD c2man ":; \
     sed -i.bak '/test -d c:\\//,/^fi\$/d' Configure; \

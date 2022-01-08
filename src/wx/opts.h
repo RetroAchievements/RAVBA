@@ -1,11 +1,13 @@
 #ifndef WX_OPTS_H
 #define WX_OPTS_H
 
+#include <vector>
+
 #define NUM_KEYS 21
 extern const wxString joynames[NUM_KEYS];
 extern wxJoyKeyBinding defkeys_keyboard[NUM_KEYS];  // keyboard defaults
-extern wxJoyKeyBinding defkeys_joystick[NUM_KEYS];  // joystick defaults
-extern wxJoyKeyBinding extrakeys_joystick[NUM_KEYS];// extra joystick defaults
+
+extern std::vector<std::vector<wxJoyKeyBinding>> defkeys_joystick;  // joystick defaults
 
 extern struct opts_t {
     opts_t();
@@ -36,6 +38,8 @@ extern struct opts_t {
     wxString gba_bios;
     int gba_link_type;
     wxString link_host;
+    wxString server_ip;
+    uint32_t link_port;
     int link_proto;
     bool link_auto;
     wxString gba_rom_dir;
@@ -43,9 +47,6 @@ extern struct opts_t {
     /// General
     bool autoload_state, autoload_cheats;
     wxString battery_dir;
-#ifndef NO_ONLINEUPDATES
-    int onlineupdates;
-#endif // NO_ONLINEUPDATES
     long last_update;
     wxString last_updated_filename;
     bool recent_freeze;
@@ -83,6 +84,9 @@ extern struct opts_t {
     /// Recent
     wxFileHistory* recent;
 
+    /// UI Config
+    bool hide_menu_bar;
+
     /// wxWindows
     // wxWidgets-generated options (opaque)
 } gopts;
@@ -115,7 +119,7 @@ opt_desc new_opt_desc(wxString opt = wxT(""), const char* cmd = NULL, wxString d
 
 extern const int num_opts;
 
-extern const wxAcceleratorEntry default_accels[];
+extern const wxAcceleratorEntryUnicode default_accels[];
 extern const int num_def_accels;
 
 // call to setup default keys.

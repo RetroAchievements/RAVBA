@@ -1,4 +1,5 @@
 //#include "../win32/stdafx.h" // would fix LNK2005 linker errors for MSVC
+#include <cmath>
 #include <assert.h>
 #include <memory.h>
 #include <stdio.h>
@@ -778,6 +779,34 @@ static const uint16_t gbColorizationPaletteData[32][3][4] = {
 #define GBSAVE_GAME_VERSION_12 12
 #define GBSAVE_GAME_VERSION GBSAVE_GAME_VERSION_12
 
+
+static bool gbCheckRomHeader(void)
+{
+    const uint8_t nlogo[16] = {
+        0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B,
+        0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D
+    };
+
+    // Game Genie
+    if ((gbRom[2] == 0x6D) && (gbRom[5] == 0x47) && (gbRom[6] == 0x65) && (gbRom[7] == 0x6E) &&
+            (gbRom[8] == 0x69) && (gbRom[9] == 0x65) && (gbRom[0xA] == 0x28) && (gbRom[0xB] == 0x54)) {
+        return true;
+
+    // Game Shark
+    } else if (((gbRom[0x104] == 0x44) && (gbRom[0x156] == 0xEA) && (gbRom[0x158] == 0x7F) && (gbRom[0x159] == 0xEA) && (gbRom[0x15B] == 0x7F)) ||
+            ((gbRom[0x165] == 0x3E) && (gbRom[0x166] == 0xD9) && (gbRom[0x16D] == 0xE1) && (gbRom[0x16E] == 0x7F))) {
+        return true;
+
+    // check for 1st 16 bytes of nintendo logo
+    } else {
+        uint8_t header[16];
+        memcpy(header, &gbRom[0x104], 16);
+        if (!memcmp(header, nlogo, 16))
+            return true;
+    }
+    return false;
+}
+
 void setColorizerHack(bool value)
 {
     allow_colorizer_hack = value;
@@ -1065,10 +1094,13 @@ void gbWriteMemory(uint16_t address, uint8_t value)
             }
 #endif
         }
-
+#else
+        gbMemory[0xff02] = value;
+        if (gbSerialOn)
+            gbSerialTicks = GBSERIAL_CLOCK_TICKS;
+#endif
         gbSerialBits = 0;
         return;
-#endif
     }
 
     case 0x04: {
@@ -1893,11 +1925,11 @@ uint8_t gbReadMemory(uint16_t address)
             return gbMemory[0xff01];
         case 0x02:
             return (gbMemory[0xff02]);
-            case 0x03:
-                log("Undocumented Memory register read %04x PC=%04x\n",
+        case 0x03:
+            log("Undocumented Memory register read %04x PC=%04x\n",
                 address,
                 PC.W);
-                return 0xff;
+            return 0xff;
         case 0x04:
             return register_DIV;
         case 0x05:
@@ -2761,6 +2793,8 @@ void gbReset()
 
     memset(&gbDataHuC3, 0, sizeof(gbDataHuC3));
     gbDataHuC3.mapperROMBank = 1;
+    gbDataHuC3.mapperRAMValue = 1;
+    gbRTCHuC3.memoryTimerRead = 1;
 
     memset(&gbDataTAMA5, 0, 26 * sizeof(int));
     gbDataTAMA5.mapperROMBank = 1;
@@ -2831,7 +2865,7 @@ void gbReset()
 void gbWriteSaveMBC1(const char* name)
 {
     if (gbRam) {
-        FILE* gzFile = fopen(name, "wb");
+        FILE* gzFile = utilOpenFile(name, "wb");
 
         if (gzFile == NULL) {
             systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
@@ -2850,7 +2884,7 @@ void gbWriteSaveMBC1(const char* name)
 void gbWriteSaveMBC2(const char* name)
 {
     if (gbRam) {
-        FILE* file = fopen(name, "wb");
+        FILE* file = utilOpenFile(name, "wb");
 
         if (file == NULL) {
             systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
@@ -2869,7 +2903,7 @@ void gbWriteSaveMBC2(const char* name)
 void gbWriteSaveMBC3(const char* name, bool extendedSave)
 {
     if (gbRam || extendedSave) {
-        FILE* gzFile = fopen(name, "wb");
+        FILE* gzFile = utilOpenFile(name, "wb");
         if (gbRam) {
 
             if (gzFile == NULL) {
@@ -2896,7 +2930,7 @@ void gbWriteSaveMBC3(const char* name, bool extendedSave)
 void gbWriteSaveMBC5(const char* name)
 {
     if (gbRam) {
-        FILE* gzFile = fopen(name, "wb");
+        FILE* gzFile = utilOpenFile(name, "wb");
 
         if (gzFile == NULL) {
             systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
@@ -2915,7 +2949,7 @@ void gbWriteSaveMBC5(const char* name)
 void gbWriteSaveMBC7(const char* name)
 {
     if (gbRam) {
-        FILE* file = fopen(name, "wb");
+        FILE* file = utilOpenFile(name, "wb");
 
         if (file == NULL) {
             systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
@@ -2933,7 +2967,7 @@ void gbWriteSaveMBC7(const char* name)
 
 void gbWriteSaveTAMA5(const char* name, bool extendedSave)
 {
-    FILE* gzFile = fopen(name, "wb");
+    FILE* gzFile = utilOpenFile(name, "wb");
 
     if (gzFile == NULL) {
         systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
@@ -2962,7 +2996,7 @@ void gbWriteSaveTAMA5(const char* name, bool extendedSave)
 void gbWriteSaveMMM01(const char* name)
 {
     if (gbRam) {
-        FILE* gzFile = fopen(name, "wb");
+        FILE* gzFile = utilOpenFile(name, "wb");
 
         if (gzFile == NULL) {
             systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
@@ -2981,7 +3015,7 @@ void gbWriteSaveMMM01(const char* name)
 bool gbReadSaveMBC1(const char* name)
 {
     if (gbRam) {
-        gzFile gzFile = gzopen(name, "rb");
+        gzFile gzFile = utilAutoGzOpen(name, "rb");
 
         if (gzFile == NULL) {
             return false;
@@ -3023,7 +3057,7 @@ bool gbReadSaveMBC1(const char* name)
 bool gbReadSaveMBC2(const char* name)
 {
     if (gbRam) {
-        FILE* file = fopen(name, "rb");
+        FILE* file = utilOpenFile(name, "rb");
 
         if (file == NULL) {
             return false;
@@ -3066,7 +3100,7 @@ bool gbReadSaveMBC2(const char* name)
 
 bool gbReadSaveMBC3(const char* name)
 {
-    gzFile gzFile = gzopen(name, "rb");
+    gzFile gzFile = utilAutoGzOpen(name, "rb");
 
     if (gzFile == NULL) {
         return false;
@@ -3122,7 +3156,7 @@ bool gbReadSaveMBC3(const char* name)
 bool gbReadSaveMBC5(const char* name)
 {
     if (gbRam) {
-        gzFile gzFile = gzopen(name, "rb");
+        gzFile gzFile = utilAutoGzOpen(name, "rb");
 
         if (gzFile == NULL) {
             return false;
@@ -3164,7 +3198,7 @@ bool gbReadSaveMBC5(const char* name)
 bool gbReadSaveMBC7(const char* name)
 {
     if (gbRam) {
-        FILE* file = fopen(name, "rb");
+        FILE* file = utilOpenFile(name, "rb");
 
         if (file == NULL) {
             return false;
@@ -3207,7 +3241,7 @@ bool gbReadSaveMBC7(const char* name)
 
 bool gbReadSaveTAMA5(const char* name)
 {
-    gzFile gzFile = gzopen(name, "rb");
+    gzFile gzFile = utilAutoGzOpen(name, "rb");
 
     if (gzFile == NULL) {
         return false;
@@ -3266,7 +3300,7 @@ bool gbReadSaveTAMA5(const char* name)
 bool gbReadSaveMMM01(const char* name)
 {
     if (gbRam) {
-        gzFile gzFile = gzopen(name, "rb");
+        gzFile gzFile = utilAutoGzOpen(name, "rb");
 
         if (gzFile == NULL) {
             return false;
@@ -3460,7 +3494,7 @@ bool gbReadBatteryFile(const char* file)
 
 bool gbReadGSASnapshot(const char* fileName)
 {
-    FILE* file = fopen(fileName, "rb");
+    FILE* file = utilOpenFile(fileName, "rb");
 
     if (!file) {
         systemMessage(MSG_CANNOT_OPEN_FILE, N_("Cannot open file %s"), fileName);
@@ -4154,6 +4188,9 @@ bool gbLoadRom(const char* szFile)
     }
     bios = (uint8_t*)calloc(1, 0x900);
 
+    if (!gbCheckRomHeader())
+        return false;
+
     return gbUpdateSizes();
 }
 
@@ -4373,6 +4410,7 @@ bool gbUpdateSizes()
     case 0x1e:
     case 0x22:
     case 0xfd:
+    case 0xfe:
     case 0xff:
         gbBattery = 1;
         break;
@@ -4396,6 +4434,7 @@ bool gbUpdateSizes()
     case 0x0f:
     case 0x10: // mbc3
     case 0xfd: // tama5
+    case 0xfe:
         gbRTCPresent = 1;
         break;
     default:
@@ -4913,34 +4952,31 @@ void gbEmulate(int ticksToStop)
                 if ((gbLcdTicksDelayed <= 0) && (gbLCDChangeHappened)) {
                     int framesToSkip = systemFrameSkip;
 
-#ifndef __LIBRETRO__
                     static bool speedup_throttle_set = false;
+                    bool turbo_button_pressed        = (gbJoymask[0] >> 10) & 1;
+#ifndef __LIBRETRO__
                     static uint32_t last_throttle;
 
-                    if ((gbJoymask[0] >> 10) & 1) {
-                        if (speedup_throttle != 0) {
+                    if (turbo_button_pressed) {
+                        if (speedup_frame_skip)
+                            framesToSkip = speedup_frame_skip;
+                        else {
                             if (!speedup_throttle_set && throttle != speedup_throttle) {
                                 last_throttle = throttle;
-                                throttle = speedup_throttle;
                                 soundSetThrottle(speedup_throttle);
                                 speedup_throttle_set = true;
                             }
-                        }
-                        else {
-                            if (speedup_frame_skip)
-                                framesToSkip = speedup_frame_skip;
 
-                            speedup_throttle_set = false;
+                            if (speedup_throttle_frame_skip)
+                                framesToSkip += std::ceil(double(speedup_throttle) / 100.0) - 1;
                         }
                     }
                     else if (speedup_throttle_set) {
-                        throttle = last_throttle;
                         soundSetThrottle(last_throttle);
-
                         speedup_throttle_set = false;
                     }
 #else
-                    if ((gbJoymask[0] >> 10) & 1)
+                    if (turbo_button_pressed)
                         framesToSkip = 9;
 #endif
 
@@ -5002,11 +5038,7 @@ void gbEmulate(int ticksToStop)
 
                             speedup = false;
 
-#ifndef __LIBRETRO__
-                            if (newmask & 1 && speedup_throttle == 0)
-#else
-                            if (newmask & 1)
-#endif
+                            if (newmask & 1 && !speedup_throttle_set)
                                 speedup = true;
 
                             gbCapture = (newmask & 2) ? true : false;
@@ -5028,8 +5060,10 @@ void gbEmulate(int ticksToStop)
                                         ticksToStop = 0;
                                 }
                                 gbFrameSkipCount = 0;
-                            } else
+                            } else {
                                 gbFrameSkipCount++;
+                                systemSendScreen();
+                            }
 
                             frameDone = true;
 
@@ -5180,6 +5214,8 @@ void gbEmulate(int ticksToStop)
                                 if (systemPauseOnFrame())
                                     ticksToStop = 0;
                             }
+                        } else {
+                            systemSendScreen();
                         }
 
                         gbFrameCount++;
@@ -5295,6 +5331,27 @@ void gbEmulate(int ticksToStop)
                 }
 #endif
             }
+#else
+        static int SIOctr = 0;
+        SIOctr++;
+        if (SIOctr % 5) {
+            if (gbSerialOn) {
+                if  (gbMemory[0xff02] & 1) {
+                    gbSerialTicks -= clockTicks;
+                    while (gbSerialTicks <= 0) {
+                        gbMemory[0xff01] = (gbMemory[0xff01] << 1) | 1;
+                        gbSerialBits++;
+                        if (gbSerialBits >= 8) {
+                            gbMemory[0xff02] &= 0x7f;
+                            gbMemory[0xff0f] = register_IF |= 8;
+                            gbSerialOn = 0;
+                            gbSerialBits = 0;
+                        } else
+                            gbSerialTicks += GBSERIAL_CLOCK_TICKS;
+                    }
+                }
+            }
+        }
 #endif
         // TODO: evaluate and fix this
         // On VBA-M (gb core running twice as fast?), each vblank is uses 35112 cycles.
@@ -5489,6 +5546,8 @@ unsigned int gbWriteSaveState(uint8_t* data, unsigned)
     utilWriteMem(data, &gbDataMBC5, sizeof(gbDataMBC5));
     utilWriteMem(data, &gbDataHuC1, sizeof(gbDataHuC1));
     utilWriteMem(data, &gbDataHuC3, sizeof(gbDataHuC3));
+    if (gbRomType == 0xfe) // HuC3 rtc data
+        utilWriteMem(data, &gbRTCHuC3, sizeof(gbRTCHuC3));
     utilWriteMem(data, &gbDataTAMA5, sizeof(gbDataTAMA5));
     if (gbTAMA5ram != NULL)
         utilWriteMem(data, gbTAMA5ram, gbTAMA5ramSize);
@@ -5606,6 +5665,8 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
     utilReadMem(&gbDataMBC5, data, sizeof(gbDataMBC5));
     utilReadMem(&gbDataHuC1, data, sizeof(gbDataHuC1));
     utilReadMem(&gbDataHuC3, data, sizeof(gbDataHuC3));
+    if (gbRomType == 0xfe) // HuC3 rtc data
+        utilReadMem(&gbRTCHuC3, data, sizeof(gbRTCHuC3));
     utilReadMem(&gbDataTAMA5, data, sizeof(gbDataTAMA5));
     if (gbTAMA5ram != NULL) {
         utilReadMem(gbTAMA5ram, data, gbTAMA5ramSize);

@@ -2,6 +2,9 @@
 
 set -e
 
+LANG=C LC_COLLATE=C LC_CTYPE=C LC_MESSAGES=C LC_MONETARY=C LC_NUMERIC=C LC_TIME=C LC_ALL=C
+export LANG LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME LC_ALL
+
 export TAR=tar
 
 . "${0%/*}/../builder/mingw-cross.sh"
@@ -13,8 +16,8 @@ export CC='ccache clang'
 export CXX='ccache clang++'
 export CPPFLAGS="-I\$BUILD_ROOT/root/include -DICONV_CONST="
 export CFLAGS="-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -framework Carbon -framework Foundation -framework CoreServices -Wno-unused-command-line-argument -DICONV_CONST= -Wl,-no_compact_unwind"
-export CXXFLAGS="-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -stdlib=libc++ -framework Carbon -framework Foundation -framework CoreServices -Wno-unused-command-line-argument -DICONV_CONST= -Wl,-no_compact_unwind"
-export OBJCXXFLAGS="-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -stdlib=libc++ -framework Carbon -framework Foundation -framework CoreServices -Wno-unused-command-line-argument -DICONV_CONST= -Wl,-no_compact_unwind"
+export CXXFLAGS="-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++17 -fpermissive -stdlib=libc++ -framework Carbon -framework Foundation -framework CoreServices -Wno-unused-command-line-argument -DICONV_CONST= -Wl,-no_compact_unwind"
+export OBJCXXFLAGS="-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++17 -fpermissive -stdlib=libc++ -framework Carbon -framework Foundation -framework CoreServices -Wno-unused-command-line-argument -DICONV_CONST= -Wl,-no_compact_unwind"
 export LDFLAGS="-fPIC -L\$BUILD_ROOT/root/lib -framework Carbon -framework Foundation -framework CoreServices -Wno-unused-command-line-argument -Wl,-no_compact_unwind"
 EOF
 }

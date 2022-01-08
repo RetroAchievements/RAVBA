@@ -2,7 +2,7 @@ DEBUG=0
 TILED_RENDERING=0
 STATIC_LINKING=0
 FRONTEND_SUPPORTS_RGB565=1
-NO_LINK=0
+NO_LINK=1
 
 SPACE :=
 SPACE := $(SPACE) $(SPACE)
@@ -20,6 +20,9 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
 else ifneq ($(findstring Darwin,$(shell uname -a)),)
 	platform = osx
 	arch = intel
+ifeq ($(shell uname -p),arm)
+	arch = arm
+endif
 ifeq ($(shell uname -p),powerpc)
 	arch = ppc
 endif
@@ -36,6 +39,9 @@ EXE_EXT = .exe
 else ifneq ($(findstring Darwin,$(shell uname -a)),)
 	system_platform = osx
 	arch = intel
+ifeq ($(shell uname -p),arm)
+	arch = arm
+endif
 ifeq ($(shell uname -p),powerpc)
 	arch = ppc
 endif
@@ -138,7 +144,24 @@ else ifeq ($(platform), osx)
 	endif
 	OSXVER = `sw_vers -productVersion | cut -d. -f 2`
 	OSX_LT_MAVERICKS = `(( $(OSXVER) <= 9)) && echo "YES"`
-	fpic += -mmacosx-version-min=10.2
+	MINVERSION =
+ifeq ($(OSX_LT_MAVERICKS),"YES")
+	MINVERSION = -mmacosx-version-min=10.2
+else
+	MINVERSION = -mmacosx-version-min=10.7
+endif
+ifeq ($(shell uname -p),arm)
+	MINVERSION =
+endif
+   ifeq ($(CROSS_COMPILE),1)
+		TARGET_RULE   = -target $(LIBRETRO_APPLE_PLATFORM) -isysroot $(LIBRETRO_APPLE_ISYSROOT)
+		CFLAGS   += $(TARGET_RULE)
+		CPPFLAGS += $(TARGET_RULE)
+		CXXFLAGS += $(TARGET_RULE)
+		LDFLAGS  += $(TARGET_RULE)
+		MINVERSION =
+   endif
+	fpic += $(MINVERSION) -stdlib=libc++
 	SHARED := -dynamiclib
 	TILED_RENDERING=1
 
@@ -147,6 +170,7 @@ else ifneq (,$(findstring ios,$(platform)))
 	TARGET := $(TARGET_NAME)_libretro_ios.dylib
 	fpic := -fPIC
 	SHARED := -dynamiclib
+        MINVERSION :=
 	ifeq ($(IOSSDK),)
 	  IOSSDK := $(shell xcodebuild -version -sdk iphoneos Path)
 	endif
@@ -159,15 +183,23 @@ else ifneq (,$(findstring ios,$(platform)))
 	endif
 	CFLAGS += -DIOS
 	ifeq ($(platform),$(filter $(platform),ios9 ios-arm64))
-	  CC     += -miphoneos-version-min=8.0
-	  CXX    += -miphoneos-version-min=8.0
-	  CFLAGS += -miphoneos-version-min=8.0
+	  MINVERSION = -miphoneos-version-min=8.0
 	else
-	  CC     += -miphoneos-version-min=5.0
-	  CXX    += -miphoneos-version-min=5.0
-	  CFLAGS += -miphoneos-version-min=5.0
+	  MINVERSION = -miphoneos-version-min=5.0
 	endif
+        CFLAGS += $(MINVERSION)
 	TILED_RENDERING=1
+
+else ifeq ($(platform), tvos-arm64)
+   TARGET := $(TARGET_NAME)_libretro_tvos.dylib
+   fpic := -fPIC
+   SHARED := -dynamiclib -DLSB_FIRST
+ifeq ($(IOSSDK),)
+   IOSSDK := $(shell xcodebuild -version -sdk appletvos Path)
+endif
+   TILED_RENDERING = 1
+   CC = cc -arch arm64 -isysroot $(IOSSDK)
+   CXX = c++ -arch arm64 -isysroot $(IOSSDK)
 
 # Theos iOS
 else ifeq ($(platform), theos_ios)
@@ -191,28 +223,6 @@ else ifeq ($(platform), qnx)
 	PLATFORM_DEFINES := -D__BLACKBERRY_QNX__ -marm -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=softfp
 	TILED_RENDERING=1
 
-# PS3
-else ifeq ($(platform), ps3)
-	TARGET := $(TARGET_NAME)_libretro_$(platform).a
-	CC = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-gcc.exe
-	CXX = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-gcc.exe
-	AR = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-ar.exe
-	ENDIANNESS_DEFINES += -DMSB_FIRST
-	PLATFORM_DEFINES := -D__CELLOS_LV2__ -D__POWERPC__ -D__ppc__
-	STATIC_LINKING=1
-	TILED_RENDERING=1
-
-# PS3 (SNC)
-else ifeq ($(platform), sncps3)
-	TARGET := $(TARGET_NAME)_libretro_ps3.a
-	CC = $(CELL_SDK)/host-win32/sn/bin/ps3ppusnc.exe
-	CXX = $(CELL_SDK)/host-win32/sn/bin/ps3ppusnc.exe
-	AR = $(CELL_SDK)/host-win32/sn/bin/ps3snarl.exe
-	ENDIANNESS_DEFINES += -DMSB_FIRST
-	PLATFORM_DEFINES := -D__CELLOS_LV2__ -D__POWERPC__ -D__ppc__
-	STATIC_LINKING=1
-	TILED_RENDERING=1
-
 # Lightweight PS3 Homebrew SDK
 else ifeq ($(platform), psl1ght)
 	TARGET := $(TARGET_NAME)_libretro_psl1ght.a
@@ -220,7 +230,7 @@ else ifeq ($(platform), psl1ght)
 	CXX = $(PS3DEV)/ppu/bin/ppu-g++$(EXE_EXT)
 	AR = $(PS3DEV)/ppu/bin/ppu-ar$(EXE_EXT)
 	ENDIANNESS_DEFINES += -DMSB_FIRST
-	PLATFORM_DEFINES := -D__CELLOS_LV2__ -D__POWERPC__ -D__ppc__
+	PLATFORM_DEFINES := -D__PS3__ -D__POWERPC__ -D__ppc__
 	STATIC_LINKING=1
 	TILED_RENDERING=1
 
@@ -450,7 +460,7 @@ else ifneq (,$(findstring windows_msvc2017,$(platform)))
 	reg_query = $(call filter_out2,$(subst $2,,$(shell reg query "$2" -v "$1" 2>nul)))
 	fix_path = $(subst $(SPACE),\ ,$(subst \,/,$1))
 
-	ProgramFiles86w := $(shell cmd /c "echo %PROGRAMFILES(x86)%")
+	ProgramFiles86w := $(shell cmd //c "echo %PROGRAMFILES(x86)%")
 	ProgramFiles86 := $(shell cygpath "$(ProgramFiles86w)")
 
 	WindowsSdkDir ?= $(call reg_query,InstallationFolder,HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Microsoft\Microsoft SDKs\Windows\v10.0)
@@ -515,8 +525,8 @@ else ifneq (,$(findstring windows_msvc2017,$(platform)))
 # Windows
 else
 	TARGET := $(TARGET_NAME)_libretro.dll
-	CC = gcc
-	CXX = g++
+	CC ?= gcc
+	CXX ?= g++
 	SHARED := -shared -static-libgcc -static-libstdc++ -Wl,-no-undefined -Wl,-version-script=$(LIBRETRO_DIR)/link.T
 	TILED_RENDERING=1
 endif

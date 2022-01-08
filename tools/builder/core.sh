@@ -42,8 +42,8 @@ esac
 
 export CPPFLAGS="$CPPFLAGS${CPPFLAGS:+ }-I\$BUILD_ROOT/root/include -DCURL_STATICLIB -DGRAPHITE2_STATIC"
 export CFLAGS="$CFLAGS${CFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
-export CXXFLAGS="$CXXFLAGS${CXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
-export OBJCXXFLAGS="$OBJCXXFLAGS${OBJCXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++11 -fpermissive -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
+export CXXFLAGS="$CXXFLAGS${CXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++17 -fpermissive -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
+export OBJCXXFLAGS="$OBJCXXFLAGS${OBJCXXFLAGS:+ }-fPIC -I\$BUILD_ROOT/root/include -L\$BUILD_ROOT/root/lib -std=gnu++17 -fpermissive -pthread -lm -DCURL_STATICLIB -DGRAPHITE2_STATIC"
 export LDFLAGS="$LDFLAGS${LDFLAGS:+ }-fPIC -L\$BUILD_ROOT/root/lib -pthread -lm"
 export STRIP="\${STRIP:-strip}"
 
@@ -108,10 +108,10 @@ DISTS=$DISTS'
     zlib            https://www.zlib.net/zlib-1.2.11.tar.gz                                                     lib/libz.a
     ccache          https://www.samba.org/ftp/ccache/ccache-3.4.3.tar.xz                                        bin/ccache
     zip             https://downloads.sourceforge.net/project/infozip/Zip%203.x%20%28latest%29/3.0/zip30.tar.gz                 bin/zip
-    openssl         https://www.openssl.org/source/openssl-1.1.1c.tar.gz                                        lib/libssl.a
+    openssl         https://www.openssl.org/source/openssl-1.1.1f.tar.gz                                        lib/libssl.a
     curl            https://curl.haxx.se/download/curl-7.65.3.tar.xz                                            lib/libcurl.a
-    cmake           https://cmake.org/files/v3.13/cmake-3.13.0-rc1.tar.gz                                       bin/cmake
-    m4              http://ftp.gnu.org/gnu/m4/m4-1.4.18.tar.xz                                                  bin/m4
+    cmake           https://github.com/Kitware/CMake/releases/download/v3.19.4/cmake-3.19.4.tar.gz              bin/cmake
+    m4              http://ftp.gnu.org/gnu/m4/m4-1.4.19.tar.xz                                                  bin/m4
     autoconf        https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.xz                                       bin/autoconf
     autoconf-archive http://mirror.team-cymru.org/gnu/autoconf-archive/autoconf-archive-2017.09.28.tar.xz       share/aclocal/ax_check_gl.m4
     automake        https://ftp.gnu.org/gnu/automake/automake-1.15.1.tar.xz                                     bin/automake
@@ -119,8 +119,8 @@ DISTS=$DISTS'
     xorg-macros     https://www.x.org/archive//individual/util/util-macros-1.19.1.tar.bz2                       share/pkgconfig/xorg-macros.pc
     help2man        https://ftp.gnu.org/gnu/help2man/help2man-1.47.5.tar.xz                                     bin/help2man
     libiconv        https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.16.tar.gz                                   lib/libiconv.a
-    gettext         http://ftp.gnu.org/pub/gnu/gettext/gettext-0.19.8.1.tar.xz                                    lib/libintl.a
-    getopt          http://frodo.looijaard.name/system/files/software/getopt/getopt-1.1.6.tar.gz                bin/getopt
+    gettext         http://ftp.gnu.org/pub/gnu/gettext/gettext-0.19.8.1.tar.xz                                  lib/libintl.a
+    getopt          https://fossies.org/linux/misc/getopt-1.1.6.tar.gz                                          bin/getopt
     gsed            http://ftp.gnu.org/gnu/sed/sed-4.4.tar.xz                                                   bin/sed
     bison           https://ftp.gnu.org/gnu/bison/bison-3.0.5.tar.xz                                            bin/bison
     texinfo         http://ftp.gnu.org/gnu/texinfo/texinfo-6.5.tar.xz                                           bin/makeinfo
@@ -128,23 +128,23 @@ DISTS=$DISTS'
     flex            https://github.com/westes/flex/archive/e7d45afc6aeb49745f17d21ddba4848e0c0118fc.tar.gz      bin/flex
     xmlto           https://releases.pagure.org/xmlto/xmlto-0.0.28.tar.bz2                                      bin/xmlto
     gperf           http://ftp.gnu.org/pub/gnu/gperf/gperf-3.1.tar.gz                                           bin/gperf
-    libicu          https://github.com/unicode-org/icu/releases/download/release-63-rc/icu4c-63rc-src.tgz       lib/libicud*t*.a
+    libicu          https://github.com/unicode-org/icu/releases/download/release-65-1/icu4c-65_1-src.tgz        lib/libicud*t*.a
     pkgconfig       https://pkgconfig.freedesktop.org/releases/pkg-config-0.29.2.tar.gz                         bin/pkg-config
-    nasm            http://repo.or.cz/nasm.git/snapshot/53371ddd17b685f8880c22b8b698e494e0f1059b.tar.gz         bin/nasm
+    nasm            https://www.nasm.us/pub/nasm/releasebuilds/2.14.02/nasm-2.14.02.tar.xz                      bin/nasm
     yasm            http://www.tortall.net/projects/yasm/releases/yasm-1.3.0.tar.gz                             bin/yasm
     pcre            https://ftp.pcre.org/pub/pcre/pcre-8.41.tar.bz2                                             lib/libpcre.a
     libffi          ftp://sourceware.org/pub/libffi/libffi-3.2.1.tar.gz                                         lib/libffi.a
     c2man           https://github.com/fribidi/c2man/archive/577ed4095383ef5284225d45709e6b5f0598a064.tar.gz    bin/c2man
-    libxml2         ftp://xmlsoft.org/libxml2/libxml2-2.9.8.tar.gz                                              lib/libxml2.a
+    libxml2         ftp://xmlsoft.org/libxml2/libxml2-2.9.12.tar.gz                                             lib/libxml2.a
     libxslt         https://github.com/GNOME/libxslt/archive/v1.1.33-rc2.tar.gz                                 lib/libxslt.a
     XML-NamespaceSupport https://cpan.metacpan.org/authors/id/P/PE/PERIGRIN/XML-NamespaceSupport-1.12.tar.gz    perl5/lib/perl5/XML/NamespaceSupport.pm
     XML-SAX-Base    https://cpan.metacpan.org/authors/id/G/GR/GRANTM/XML-SAX-Base-1.09.tar.gz                   perl5/lib/perl5/XML/SAX/Base.pm
     XML-SAX         https://cpan.metacpan.org/authors/id/G/GR/GRANTM/XML-SAX-0.99.tar.gz                        perl5/lib/perl5/XML/SAX.pm
     docbook2x       https://downloads.sourceforge.net/project/docbook2x/docbook2x/0.8.8/docbook2X-0.8.8.tar.gz  bin/docbook2man
     expat           https://github.com/libexpat/libexpat/archive/R_2_2_4.tar.gz                                 lib/libexpat.a
-    libpng          https://download.sourceforge.net/libpng/libpng-1.6.32.tar.xz                                lib/libpng.a
-    libjpeg-turbo   https://github.com/libjpeg-turbo/libjpeg-turbo/archive/1.5.2.tar.gz                         lib/libjpeg.a
-    libtiff         http://download.osgeo.org/libtiff/tiff-4.0.9.tar.gz                                         lib/libtiff.a
+    libpng          https://download.sourceforge.net/libpng/libpng-1.6.37.tar.xz                                lib/libpng.a
+    libjpeg-turbo   https://github.com/libjpeg-turbo/libjpeg-turbo/archive/2.0.4.tar.gz                         lib/libjpeg.a
+    libtiff         http://download.osgeo.org/libtiff/tiff-4.1.0.tar.gz                                         lib/libtiff.a
 #    libcroco        http://ftp.gnome.org/pub/gnome/sources/libcroco/0.6/libcroco-0.6.12.tar.xz                  lib/libcroco-0.6.a
     libuuid         https://downloads.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz                      lib/libuuid.a
     freetype        http://download.savannah.gnu.org/releases/freetype/freetype-2.10.0.tar.bz2                  lib/libfreetype.a
@@ -153,7 +153,7 @@ DISTS=$DISTS'
     dejavu          https://downloads.sourceforge.net/project/dejavu/dejavu/2.37/dejavu-fonts-ttf-2.37.tar.bz2  share/fonts/dejavu/DejaVuSansMono.ttf
     liberation      https://releases.pagure.org/liberation-fonts/liberation-fonts-ttf-2.00.1.tar.gz             share/fonts/liberation/LiberationMono-Regular.ttf
     urw             http://git.ghostscript.com/?p=urw-core35-fonts.git;a=snapshot;h=91edd6ece36e84a1c6d63a1cf63a1a6d84bd443a;sf=tgz share/fonts/urw/URWBookman-Light.ttf
-    graphviz        https://gitlab.com/graphviz/graphviz/repository/archive.tar.bz2?ref=bd97cff688f7a7b85b6f1262e14eb1cac0862fcd    bin/dot_static
+    graphviz        https://gitlab.com/graphviz/graphviz/repository/archive.tar.bz2?ref=4bf0ec9b0f8320fd7ba63617e9207c1e72f816b7        bin/dot_static
     docbook4.2      http://www.docbook.org/xml/4.2/docbook-xml-4.2.zip                                                    share/xml/docbook/schema/dtd/4.2/catalog.xml
     docbook4.1.2    http://www.docbook.org/xml/4.1.2/docbkx412.zip                                                        share/xml/docbook/schema/dtd/4.1.2/catalog.xml
     docbook4.3      http://www.docbook.org/xml/4.3/docbook-xml-4.3.zip                                                    share/xml/docbook/schema/dtd/4.3/catalog.xml
@@ -163,17 +163,17 @@ DISTS=$DISTS'
     docbook-xsl     https://downloads.sourceforge.net/project/docbook/docbook-xsl/1.79.1/docbook-xsl-1.79.1.tar.bz2       share/xml/docbook/stylesheet/docbook-xsl/catalog.xml
     docbook-xsl-ns  https://downloads.sourceforge.net/project/docbook/docbook-xsl-ns/1.79.1/docbook-xsl-ns-1.79.1.tar.bz2 share/xml/docbook/stylesheet/docbook-xsl-ns/catalog.xml
     python2         https://www.python.org/ftp/python/2.7.15/Python-2.7.15.tar.xz                               bin/python
-    python3         https://www.python.org/ftp/python/3.6.5/Python-3.6.5.tar.xz                                 bin/python3
+    python3         https://www.python.org/ftp/python/3.9.1/Python-3.9.1.tar.xz                                 bin/python3
     swig            https://downloads.sourceforge.net/project/swig/swig/swig-3.0.12/swig-3.0.12.tar.gz          bin/swig
-    libxml2-python  ftp://xmlsoft.org/libxml2/libxml2-sources-2.9.7.tar.gz                                      lib/python2.7/site-packages/libxml2.py
+    libxml2-python  ftp://xmlsoft.org/libxml2/libxml2-2.9.12.tar.gz                                             lib/python2.7/site-packages/libxml2.py
     doxygen         https://downloads.sourceforge.net/project/doxygen/rel-1.8.14/doxygen-1.8.14.src.tar.gz      bin/doxygen
     bakefile        https://github.com/vslavik/bakefile/archive/33c270a565ba0954cca9611b2443593b2e9e698a.tar.gz bin/bakefile_gen
     XML-Parser      https://cpan.metacpan.org/authors/id/T/TO/TODDR/XML-Parser-2.44.tar.gz                      perl5/man/man3/XML*Parser.3*
     intltool        https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz                bin/intltoolize
     ninja           https://github.com/ninja-build/ninja/archive/v1.9.0.tar.gz                                  bin/ninja
     meson           https://github.com/mesonbuild/meson/releases/download/0.51.2/meson-0.51.2.tar.gz            bin/meson
-    glib            https://github.com/GNOME/glib/archive/2.58.1.tar.gz                                         lib/libglib-2.0.a
-    libgpg-error    https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.36.tar.bz2                     lib/libgpg-error.a
+    glib            https://github.com/GNOME/glib/archive/2.62.2.tar.gz                                         lib/libglib-2.0.a
+    libgpg-error    https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.41.tar.bz2                     lib/libgpg-error.a
     libgcrypt       https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.5.tar.bz2                          lib/libgcrypt.a
     libsecret       http://ftp.gnome.org/pub/gnome/sources/libsecret/0.19/libsecret-0.19.1.tar.xz               lib/libsecret-1.a
     sdl2            https://www.libsdl.org/release/SDL2-2.0.10.tar.gz                                           lib/libSDL2.a
@@ -181,9 +181,9 @@ DISTS=$DISTS'
     libogg          http://downloads.xiph.org/releases/ogg/libogg-1.3.4.tar.xz                                  lib/libogg.a
     libvorbis       https://github.com/xiph/vorbis/archive/v1.3.6.tar.gz                                        lib/libvorbis.a
     harfbuzz        https://www.freedesktop.org/software/harfbuzz/release/harfbuzz-1.7.5.tar.bz2                lib/libharfbuzz.a
-    sfml            https://github.com/SFML/SFML/archive/013d053277c980946bc7761a2a088f1cbb788f8c.tar.gz        lib/libsfml-system-s.a
+    sfml            https://github.com/SFML/SFML/archive/0337568846584fffcee38036880f9f48888c8b7c.tar.gz        lib/libsfml-system-s.a
     shared-mime-info http://freedesktop.org/~hadess/shared-mime-info-1.9.tar.xz                                 bin/update-mime-database
-    wxwidgets       https://github.com/wxWidgets/wxWidgets/archive/1753ed403765269bf9f6d3bb540f7e77a8758e39.tar.gz lib/libwx_baseu-3.1*.a
+    wxwidgets       https://github.com/wxWidgets/wxWidgets/archive/9cc0c9a082e0c3b2a4c14e3c6811de0e3a1a3799.tar.gz lib/libwx_baseu-3.1*.a
     graphite2       https://github.com/silnrsi/graphite/archive/ce0e793f22127d7ba6422d440bd83b58f864ef7e.tar.gz lib/libgraphite2.a
     xvidcore        http://downloads.xvid.org/downloads/xvidcore-1.3.5.tar.bz2                                  lib/libxvidcore.a
     fribidi         https://github.com/fribidi/fribidi/releases/download/v1.0.1/fribidi-1.0.1.tar.bz2           lib/libfribidi.a
@@ -203,14 +203,13 @@ DISTS=$DISTS'
     libvpx          https://github.com/webmproject/libvpx/archive/v1.8.1.tar.gz                                 lib/libvpx.a
     libwavpack      http://www.wavpack.com/wavpack-5.1.0.tar.bz2                                                lib/libwavpack.a
     libx264         https://download.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-20190913-2245-stable.tar.bz2      lib/libx264.a
-    libx265         https://bitbucket.org/multicoreware/x265/downloads/x265_3.1.2.tar.gz                        lib/libx265.a
+    libx265         https://github.com/videolan/x265/archive/3.4.tar.gz                                         lib/libx265.a
     libxavs         https://github.com/Distrotech/xavs/archive/distrotech-xavs-git.tar.gz                       lib/libxavs.a
     libzmq          https://github.com/zeromq/libzmq/releases/download/v4.2.2/zeromq-4.2.2.tar.gz               lib/libzmq.a
-#   libzvbi         https://downloads.sourceforge.net/project/zapping/zvbi/0.2.35/zvbi-0.2.35.tar.bz2           lib/libzvbi.a
-    ffmpeg          https://ffmpeg.org/releases/ffmpeg-4.2.1.tar.bz2                                            lib/libavformat.a
+#    libzvbi         https://downloads.sourceforge.net/project/zapping/zvbi/0.2.35/zvbi-0.2.35.tar.bz2           lib/libzvbi.a
+    ffmpeg          https://ffmpeg.org/releases/ffmpeg-4.3.1.tar.bz2                                            lib/libavformat.a
 '
 
-# for now we don't build ffmpeg because game recording is broken
 BUILD_FFMPEG=1
 
 FFMPEG_DISTS='
@@ -219,11 +218,9 @@ FFMPEG_DISTS='
     libvpx libwavpack libx264 libx265 libxavs libzmq libzvbi ffmpeg
 '
 
-: ${PATH_SEP:=':'}
+PROJECT_ARGS="-DwxWidgets_CONFIG_OPTIONS='--prefix=$BUILD_ROOT/root' -DBUILD_TESTING=NO"
 
-# these two can be set to always be included regardless of overrides
-export CONFIGURE_REQUIRED_ARGS="$CONFIGURE_REQUIRED_ARGS"
-export CMAKE_REQUIRED_ARGS="$CMAKE_REQUIRED_ARGS"
+: ${PATH_SEP:=':'}
 
 export CMAKE_BASE_ARGS="$CMAKE_BASE_ARGS -DBUILD_SHARED_LIBS=NO -DENABLE_SHARED=NO -DCMAKE_PREFIX_PATH:FILEPATH=\"\$CMAKE_PREFIX_PATH\" -DCMAKE_BUILD_TYPE=Release"
 
@@ -241,17 +238,14 @@ fi
 
 export CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-shared --enable-static $CONFIGURE_INSTALL_ARGS"
 export CMAKE_ARGS="$CMAKE_BASE_ARGS $CMAKE_ARGS $CMAKE_INSTALL_ARGS"
-export MESON_ARGS="--buildtype release --default-library static -Dintrospection=false $MESON_INSTALL_ARGS"
+export MESON_ARGS="$MESON_BASE_ARGS --buildtype release --default-library static -Dintrospection=false $MESON_INSTALL_ARGS"
 
 DIST_PATCHES=$DIST_PATCHES'
-    m4              https://raw.githubusercontent.com/gentoo/gentoo/master/sys-devel/m4/files/m4-1.4.18-glibc228.patch
     docbook2x       https://gist.githubusercontent.com/rkitover/0b5dcc95a0703a9b0e0e7eb6d325a98e/raw/e256d2fad8d19633ac8abe02a0d1e119063d1fd9/docbook2x.patch
     ccache          https://gist.githubusercontent.com/rkitover/4dd30c2841a2131be8715038f538d622/raw/40a8f0f50aa6ca5f9658a0c37aa17393cc80c109/ccache-3.4.2-msys.patch
     graphite2       https://gist.githubusercontent.com/rkitover/e753f41a7f6461ad412c2d076ec24e0f/raw/d0c2b8cccd556e407e15da8a2e739a902bd1a3b5/graphite2-static-cmake-opts.patch
     python2         https://gist.githubusercontent.com/rkitover/2d9e5baff1f1cc4f2618dee53083bd35/raw/7f33fcf5470a9f1013ac6ae7bb168368a98fe5a0/python-2.7.14-custom-static-openssl.patch https://gist.githubusercontent.com/rkitover/afab7ed3ac7ce1860c43a258571c8ae1/raw/6f5fc90a7acf5f5c3ffda2edf402b28f469a4b3b/python-2.7.14-static-libintl.patch
-    python3         https://gist.githubusercontent.com/rkitover/93d89a679705875c59275fb0a8f22b45/raw/6149e7fa3920d6c674c79448c5a4c9313620e06c/python-3.6.3-custom-static-openssl.patch https://gist.githubusercontent.com/rkitover/b18f19eafda3775a9652cc9cdf3ec914/raw/ed14c34bf9f205ccc3a4684dbdb83f8620162b98/python-3.6.3-static-libintl.patch
     intltool        https://gist.githubusercontent.com/rkitover/d638882f52e5d5f8e392cbf6842cd6d0/raw/dcfbe358bbb8b89f88b40a9c3402494552fd33f8/intltool-0.51.0.patch
-    libgpg-error    https://raw.githubusercontent.com/gentoo/gentoo/master/dev-libs/libgpg-error/files/libgpg-error-1.36-gawk5-support.patch
 '
 
 DIST_TAR_ARGS="$DIST_TAR_ARGS
@@ -266,7 +260,6 @@ DIST_CONFIGURE_TYPES="$DIST_CONFIGURE_TYPES
     python2         autoreconf
     python3         autoreconf
     libxml2-python  python
-    glib            autoreconf
     graphviz        autoreconf
     docbook2x       autoreconf
     libvorbis       autoreconf
@@ -281,11 +274,12 @@ DIST_PRE_BUILD="$DIST_PRE_BUILD
 #    xz              mkdir -p build-aux; touch build-aux/config.rpath; mkdir -p po; touch po/Makefile.in.in; sed -i.bak 's/ po / /g' Makefile.am;
     getopt          sed -i.bak 's/\\\$(LDFLAGS)\\(.*\\)\$/\\1 \$(LDFLAGS)/' Makefile;
     libicu          cd source;
+#    c2man           sed -i.bak 's/exit(\\([^)]*\\));/return \\1;/g' Configure
 #    flex-2.6.3      sed -i.bak '/^'\"\$TAB\"'tests \\\\\$/d' Makefile.am;
     flex            mkdir -p build-aux; touch build-aux/config.rpath; mkdir -p po; touch po/Makefile.in.in; sed -i.bak '/po \\\\$/d' Makefile.am;
     fontconfig      sed -i.bak 'd;q' test/Makefile.am;
     python3         sed -i.bak '/-Wl,-stack_size,/d' configure.ac;
-    libxml2-python  cd python; \
+    libxml2-python  sh autogen.sh \"--with-python=\$BUILD_ROOT/root/bin/python3\"; cd python; \
                     sed -i.bak \"s,^ROOT = .*,ROOT = os.getenv('BUILD_ROOT') + '/root',; s|^\\( *platformLibs = \\[ *[^]].*\\)\\] *\$|\\1, 'lzma', 'iconv', 'intl']|\" setup.py;
     bakefile        sed -i.bak '/SUBDIRS = doc/d' Makefile.am;
     unzip           rm -f unix/Contents; ln -sf \$(find unix -mindepth 1 -maxdepth 1) .;
@@ -335,7 +329,7 @@ DIST_CONFIGURE_OVERRIDES="$DIST_CONFIGURE_OVERRIDES
     XML-SAX     echo no | PERL_MM_USE_DEFAULT=0 perl Makefile.PL
     wxwidgets   ./configure \$CONFIGURE_REQUIRED_ARGS --disable-shared --prefix=/usr --enable-stl --disable-precomp-headers --enable-cxx11 --enable-permissive --with-opengl --with-libpng
     libvpx      ./configure --disable-shared --enable-static --prefix=/usr --disable-unit-tests --disable-tools --disable-docs --disable-examples
-    ffmpeg      ./configure --disable-shared --enable-static --prefix=/usr --pkg-config-flags=--static --enable-nonfree --extra-version=tessus --enable-avisynth --enable-fontconfig --enable-gpl --enable-version3 --enable-libass --enable-libbluray --enable-libfreetype --enable-libgsm --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopus --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libvidstab --enable-libvo-amrwbenc --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libx264 --enable-libx265 --enable-libxavs --enable-libxvid --enable-libzmq --enable-openssl --enable-lzma --extra-cflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-cxxflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-objcflags='-DMODPLUG_STATIC -DZMQ_STATIC'
+    ffmpeg      ./configure --disable-shared --enable-static --prefix=/usr --pkg-config-flags=--static --enable-nonfree --extra-version=tessus --enable-fontconfig --enable-gpl --enable-version3 --enable-libass --enable-libbluray --enable-libfreetype --enable-libgsm --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopus --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libvidstab --enable-libvo-amrwbenc --enable-libvorbis --enable-libvpx --enable-libwavpack --enable-libx264 --enable-libx265 --enable-libxavs --enable-libxvid --enable-libzmq --enable-openssl --enable-lzma --extra-cflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-cxxflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-objcflags='-DMODPLUG_STATIC -DZMQ_STATIC' --extra-libs=-liconv
 "
 
 DIST_BUILD_OVERRIDES="$DIST_BUILD_OVERRIDES
@@ -371,15 +365,16 @@ DIST_ARGS="$DIST_ARGS
     libxslt     --without-python --without-crypto
     libgd       --without-xpm
     fontconfig  --with-baseconfigdir=/etc/fonts 
-    graphviz    --disable-ltdl --without-x --disable-swig CFLAGS=\"-include \$PWD/declspec.h \$CFLAGS\"
+    graphviz    --disable-ltdl --without-x --disable-swig CFLAGS=\"-include \$PWD/declspec.h \$CFLAGS\" CC=\"\$CXX\"
     python2     --with-ensurepip --with-system-expat
     python3     --with-ensurepip --with-system-expat
-    glib        --with-libiconv=gnu
     bakefile    --enable-shared
     XML-Parser  EXPATINCPATH=\"\$BUILD_ROOT/root/include\" EXPATLIBPATH=\"\$BUILD_ROOT/root/lib\"
     doxygen     -DICONV_ACCEPTS_NONCONST_INPUT:BOOL=FALSE -DICONV_ACCEPTS_CONST_INPUT:BOOL=TRUE
     sfml        -DSFML_USE_SYSTEM_DEPS=TRUE
     libcroco    --disable-Bsymbolic
+    libjpeg-turbo -DWITH_JPEG8=ON -DWITH_SIMD=OFF
+    libtiff     --disable-lzma --disable-webp
     freetype    --with-harfbuzz=no
     harfbuzz    --with-cairo=no --with-icu=no
     graphite2   -DGRAPHITE2_NFILEFACE=ON -DGRAPHITE2_TESTS=OFF -DGRAPHITE2_DOCS=OFF
@@ -422,10 +417,18 @@ DIST_EXTRA_LDFLAGS="$DIST_EXTRA_LDFLAGS
     ffmpeg      -lm -llzma -lpthread
 "
 
+DIST_EXTRA_CXXFLAGS="$DIST_EXTRA_CXXFLAGS
+    gperf       -std=gnu++11
+    doxygen     -std=gnu++11
+    wxwidgets   -std=gnu++11
+    libmodplug  -std=gnu++11
+    libopencore-amrnb -std=gnu++11
+"
+
 DIST_EXTRA_LIBS="$DIST_EXTRA_LIBS
     gettext             -liconv
     shared-mime-info    \$LD_START_GROUP -lxml2 -lgio-2.0 -lgmodule-2.0 -lgobject-2.0 -lglib-2.0 -lpcre -llzma -lz -lm -lffi -lpthread -liconv -lresolv -ldl \$LD_END_GROUP
-    python3             -lintl
+    python3             -liconv -lintl
     harfbuzz            -lz
     wxwidgets           -ljpeg -ltiff
 "
@@ -485,6 +488,13 @@ pre_build_all() {
 setup() {
     detect_os
 
+    target_os=${CROSS_OS:-$os}
+    target_bits=${target_bits:-$bits}
+
+    mkdir -p "$BUILD_ROOT/tmp"
+
+    rm -rf "$BUILD_ROOT/tmp/"*
+
     mkdir -p "$BUILD_ROOT/root/include"
     [ -L "$BUILD_ROOT/root/inc" ] || ln -s "$BUILD_ROOT/root/include" "$BUILD_ROOT/root/inc"
 
@@ -504,9 +514,18 @@ setup() {
     done
 
     # things like strawberry perl very rudely put this in the PATH
-    [ -L bin/gmake ] || ln -s "$(command -v make)" bin/gmake
+    if [ "$os" != mac ]; then
+        [ -L bin/gmake ] || ln -s "$(command -v make)" bin/gmake
+    fi
 
     cd "$OPWD"
+
+    # Don't use ffmpeg for 32 bit windows builds for XP compat and to make the
+    # binary smaller.
+    if [ "$target_os" = windows ] && [ "$target_bits" -eq 32 ]; then
+        BUILD_FFMPEG=
+        PROJECT_ARGS="$PROJECT_ARGS -DENABLE_OPENAL=NO"
+    fi
 
     if [ -z "$BUILD_FFMPEG" ]; then
         for dist in $FFMPEG_DISTS; do
@@ -622,7 +641,7 @@ debian_install_core_deps() {
     installing_core_deps
 
     sudo apt-get -qq update || :
-    sudo apt-get -qy install build-essential g++ curl ccache perl
+    sudo apt-get -qy install build-essential g++ curl ccache perl meson
 
     done_msg
 }
@@ -630,13 +649,13 @@ debian_install_core_deps() {
 fedora_install_core_deps() {
     installing_core_deps
 
-    sudo dnf install -y --nogpgcheck --best --allowerasing gcc gcc-c++ make redhat-rpm-config curl perl ccache file patch findutils
+    sudo dnf install -y --nogpgcheck --best --allowerasing gcc gcc-c++ make redhat-rpm-config curl perl ccache file patch findutils meson
 }
 
 suse_install_core_deps() {
     installing_core_deps
 
-    sudo zypper in -y gcc gcc-c++ binutils glibc-devel-static make curl perl ccache file patch
+    sudo zypper in -y gcc gcc-c++ binutils glibc-devel-static make curl perl ccache file patch meson
 }
 
 arch_install_core_deps() {
@@ -652,7 +671,7 @@ arch_install_core_deps() {
     sudo pacman -Sy
 
     # not using the base-devel group because it can break gcc-multilib
-    sudo pacman --noconfirm --needed -S $gcc_pkg binutils file grep gawk gzip make patch sed util-linux curl ccache perl
+    sudo pacman --noconfirm --needed -S $gcc_pkg binutils file grep gawk gzip make patch sed util-linux curl ccache perl meson
 
     done_msg
 }
@@ -661,7 +680,7 @@ solus_install_core_deps() {
     installing_core_deps
 
     sudo eopkg -y update-repo
-    sudo eopkg -y install -c system.devel curl perl
+    sudo eopkg -y install -c system.devel curl perl meson
 
     done_msg
 }
@@ -695,7 +714,7 @@ msys2_install_core_deps() {
     done
 
     # install
-    pacman --noconfirm --needed -S make tar patch diffutils ccache perl msys2-w32api-headers msys2-runtime-devel gcc gcc-libs mpfr windows-default-manifest python python2 pass "$@"
+    pacman --noconfirm --needed -S make tar patch diffutils ccache perl msys2-w32api-headers msys2-runtime-devel gcc gcc-libs mpfr windows-default-manifest python python2 pass ninja "$@"
 
     # make sure msys perl takes precedence over mingw perl if the latter is installed
     mkdir -p "$BUILD_ROOT/root/bin"
@@ -727,7 +746,7 @@ cygwin_install_core_deps() {
         set -- "$@" "${target}-${p}"
     done
 
-    apt-cyg install make tar patch diffutils ccache perl m4 cygwin32-w32api-headers gcc-core gcc-g++ mpfr windows-default-manifest python2 libncurses-devel "$@"
+    apt-cyg install make tar patch diffutils ccache perl m4 cygwin32-w32api-headers gcc-core gcc-g++ mpfr windows-default-manifest python2 libncurses-devel meson "$@"
 
     # alias python2 to python
     ln -sf /usr/bin/python2.exe "$BUILD_ROOT/root/bin/python.exe"
@@ -750,7 +769,7 @@ mac_install_core_deps() {
         error 'Please install Mac Homebrew: [35m;https://brew.sh/[0m'
     fi
 
-    brew -v install perl
+    brew -v install perl meson
 }
 
 setup_tmp_dir() {
@@ -1398,7 +1417,7 @@ build_dist() {
             fi
             dist_post_configure "$current_dist"
             eval "set -- $(dist_ninja_args "$current_dist")"
-            echo_run ninja -j $NUM_CPUS "$@"
+            echo_run ninja "$@"
 
             if [ -z "$install_override" ]; then
                 rm -rf destdir
@@ -1508,7 +1527,7 @@ build_dist() {
             fi
             dist_post_configure "$current_dist"
             eval "set -- $(dist_ninja_args "$current_dist")"
-            echo_run ninja -j$NUM_CPUS "$@"
+            echo_run ninja "$@"
 
             if [ -z "$install_override" ]; then
                 rm -rf destdir
@@ -1662,9 +1681,9 @@ make_install() {
     cd ..
 
     if grep -Eq 'DESTDIR|cmake_install\.cmake' $(find . -name Makefile -o -name makefile -o -name '*.mk' -o -name '*.mak') 2>/dev/null; then
-        echo_run make install prefix="${prefix}" PREFIX="${prefix}" DESTDIR="$PWD/destdir" "$@" || :
+        echo_eval_run make install $(dist_make_args $current_dist) prefix="${prefix}" PREFIX="${prefix}" DESTDIR="$PWD/destdir" "$@" || :
     else
-        echo_run make install prefix="$PWD/destdir${prefix}" PREFIX="$PWD/destdir${prefix}" INSTALL_PREFIX="$PWD/destdir${prefix}" INSTALL_ROOT="$PWD/destdir${prefix}" INSTALLTOP="/..${prefix}/" "$@" || :
+        echo_eval_run make install $(dist_make_args $current_dist) prefix="$PWD/destdir${prefix}" PREFIX="$PWD/destdir${prefix}" INSTALL_PREFIX="$PWD/destdir${prefix}" INSTALL_ROOT="$PWD/destdir${prefix}" INSTALLTOP="/..${prefix}/" "$@" || :
     fi
 }
 
@@ -1679,12 +1698,21 @@ install_dist() {
 
     # if there is an extra prefix, like e.g. 'msys64' on msys2 before 'usr/',
     # remove it
-    if ([ "$(list_length destdir/*)" -eq 1 ] && [ ! -d destdir${prefix} ]) || \
+    if ([ "$(list_length destdir/*)" -eq 1 ] && [ ! -d "destdir${prefix}" ]) || \
        ([ "$(list_length destdir/*)" -eq 2 ] && [ "$(find destdir${prefix} -type f 2>/dev/null | wc -l)" -eq 0 ]); then
-        mv destdir/${prefix}/* tmp-usr
+        mv "destdir/${prefix}"/* tmp-usr
         rm -rf destdir/*
-        mkdir -p destdir${prefix%/*}
-        mv tmp-usr destdir${prefix}
+        mkdir -p "destdir${prefix%/*}"
+        mv tmp-usr "destdir${prefix}"
+    fi
+
+    # if there is no prefix in the destdir, create it
+    if [ ! -d "destdir${prefix}" ]; then
+        find destdir -maxdepth 1 -mindepth 1 | \
+        while read -r installed; do
+            mkdir -p "destdir${prefix}"
+            mv "$installed" "destdir${prefix}"
+        done
     fi
 
     # move libs out of platforms dirs like lib/x86_64-linux-gnu/ and lib64/
@@ -2220,7 +2248,12 @@ dist_ninja_args() {
     current_dist=$1
     [ -n "$current_dist" ] || die 'dist_ninja_args: dist name required'
 
-    puts "-v $(table_line DIST_MAKE_ARGS $current_dist)" || :
+    _num_cpus=$NUM_CPUS
+
+    # ninja hits the open file limit on windows
+    [ "$os" = windows ] && [ $_num_cpus -gt 32 ] && _num_cpus=32
+
+    puts "-v $(table_line DIST_MAKE_ARGS $current_dist) -j $_num_cpus" || :
 }
 
 dist_make_install_args() {
@@ -2624,74 +2657,38 @@ die() {
 build_project() {
     puts "${NL}[32mBuilding project: [1;34m$CHECKOUT[0m${NL}${NL}"
 
-    target_os=${CROSS_OS:-$os}
-    target_bits=${target_bits:-$bits}
-
     dist_pre_build project
 
     mkdir -p "$BUILD_ROOT/project"
     cd "$BUILD_ROOT/project"
 
-    rm -f visualboyadvance-m.exe
+    rm -rf visualboyadvance-m.exe visualboyadvance-m.app
 
     lto=ON
 
-    # FIXME: LTO still broken on 64 bit mingw
-    if [ "$target_os" = windows ] && [ "$target_bits" = 64 ]; then
+    # FIXME: LTO still broken on 64 bit mingw, and now 32 bit mingw too
+    if [ "$target_os" = windows ]; then
         lto=OFF
     fi
 
-    echo_eval_run cmake "'$CHECKOUT'" $CMAKE_REQUIRED_ARGS -DVBAM_STATIC=ON -DENABLE_LTO=${lto} $CMAKE_ARGS $PROJECT_ARGS $@
-    echo_run make -j$NUM_CPUS VERBOSE=1
+    rm -rf   release debug
+    mkdir -p release debug
 
-    if [ "$target_os" = mac ]; then
-        $STRIP visualboyadvance-m.app/Contents/MacOS/visualboyadvance-m
-
-        # unlock keychain for codesigning certificate
-        security -v unlock-keychain ~/Library/Keychains/login.keychain* || :
-
-        codesign -s "Developer ID Application" --deep ./visualboyadvance-m.app || :
-
-        zip=./visualboyadvance-m-Mac-${target_bits:-$bits}bit.zip
-
-        rm -f $zip
-        zip -9r $zip ./visualboyadvance-m.app
-
-        rm -f $zip.asc
-        gpg --detach-sign -a $zip || :
-    elif [ "$target_os" != windows ] && path_exists visualboyadvance-m; then
-        $STRIP visualboyadvance-m
-    elif [ "$target_os" = windows ] && path_exists visualboyadvance-m.exe; then
-        $STRIP visualboyadvance-m.exe
-
-        mv visualboyadvance-m.exe visualboyadvance-m-unsigned.exe
-
-        message 'Press ENTER to use your GPG passphrase to unlock your code-signing certificate...'
-        read -r dummy
-
-        osslsigncode sign -pkcs12 ~/.codesign/windows_comodo.pkcs12 -pass "$(pass vbam-windows-codesign-cert)" \
-            -n visualboyadvance-m -i https://github.com/visualboyadvance-m/visualboyadvance-m \
-            -in visualboyadvance-m-unsigned.exe -out visualboyadvance-m.exe || cp visualboyadvance-m-unsigned.exe visualboyadvance-m.exe
-
-        zip=./visualboyadvance-m-Win-${target_bits:-$bits}bit.zip
-
-        rm -f $zip
-        zip -9 $zip ./visualboyadvance-m.exe
-
-        rm -f translations.zip
-
-        make install DESTDIR=./destdir
-        cd destdir/usr/share/locale
-        zip -9r ../../../../translations.zip *
-        cd ../../../..
-
-        rm -f $zip.asc translations.zip.asc
-
-        gpg --detach-sign -a $zip || :
-        gpg --detach-sign -a translations.zip || :
-    fi
-
+    # Release build.
+    puts "${NL}[32mBuilding Release...[0m${NL}${NL}"
+    cd release
+    echo_eval_run cmake "'$CHECKOUT'" $CMAKE_REQUIRED_ARGS -DVBAM_STATIC=ON -DENABLE_LTO=${lto} -DUPSTREAM_RELEASE=TRUE $CMAKE_ARGS $PROJECT_ARGS -G Ninja $@
+    echo_run ninja -j$NUM_CPUS -v
     dist_post_build project
+    cd ..
+
+    # Debug build.
+    puts "${NL}[32mBuilding Debug...[0m${NL}${NL}"
+    cd debug
+    echo_eval_run cmake "'$CHECKOUT'" $CMAKE_REQUIRED_ARGS -DVBAM_STATIC=ON -DENABLE_LTO=${lto} -DUPSTREAM_RELEASE=TRUE $CMAKE_ARGS $PROJECT_ARGS -DCMAKE_BUILD_TYPE=Debug -G Ninja $@
+    echo_run ninja -j$NUM_CPUS -v
+    dist_post_build project
+    cd ..
 
     puts "${NL}[32mBuild Successful!!![0m${NL}${NL}Build results can be found in: [1;34m$BUILD_ROOT/project[0m${NL}${NL}"
 }

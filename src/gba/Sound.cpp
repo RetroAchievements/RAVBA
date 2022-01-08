@@ -517,6 +517,9 @@ int soundGetEnable()
 
 void soundReset()
 {
+    if (!soundDriver)
+        return;
+
     soundDriver->reset();
 
     remake_stereo_buffer();
@@ -536,6 +539,10 @@ bool soundInit()
 
     if (!soundDriver->init(soundSampleRate))
         return false;
+
+    if (!stereo_buffer) {
+        remake_stereo_buffer();
+    }
 
     soundPaused = true;
     return true;
