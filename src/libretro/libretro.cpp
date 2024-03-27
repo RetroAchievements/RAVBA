@@ -16,7 +16,7 @@
 #include "../apu/Gb_Apu.h"
 #include "../apu/Gb_Oscs.h"
 #include "../common/Port.h"
-#include "../common/ConfigManager.h"
+#include "../common/sizes.h"
 #include "../gba/Cheats.h"
 #include "../gba/EEprom.h"
 #include "../gba/Flash.h"
@@ -48,6 +48,7 @@ static retro_input_poll_t poll_cb;
 static retro_input_state_t input_cb;
 static retro_environment_t environ_cb;
 static retro_set_rumble_state_t rumble_cb;
+static retro_audio_sample_t audio_cb;
 retro_audio_sample_batch_t audio_batch_cb;
 
 static char retro_system_directory[2048];
@@ -59,12 +60,12 @@ static bool option_sndInterpolation = true;
 static bool option_useBios = false;
 static bool option_colorizerHack = false;
 static bool option_forceRTCenable = false;
-static bool option_showAdvancedOptions = false;
 static double option_sndFiltering = 0.5;
 static unsigned option_gbPalette = 0;
 static bool option_lcdfilter = false;
 
 // filters
+typedef void (*IFBFilterFunc)(uint8_t*, uint32_t, int, int);
 static IFBFilterFunc ifb_filter_func = NULL;
 
 static unsigned retropad_device[4] = {0};
@@ -86,6 +87,8 @@ int systemVerbose = 0;
 int systemFrameSkip = 0;
 int systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
 int emulating = 0;
+
+struct CoreOptions coreOptions;
 
 #ifdef BKPT_SUPPORT
 void (*dbgOutput)(const char* s, uint32_t addr);
@@ -163,28 +166,56 @@ static void set_gbPalette(void)
 
 static void* gb_rtcdata_prt(void)
 {
-    switch (gbRomType) {
-    case 0x0f:
-    case 0x10: // MBC3 + extended
+    switch (g_gbCartData.mapper_type()) {
+    case gbCartData::MapperType::kMbc3:
         return &gbDataMBC3.mapperSeconds;
-    case 0xfd: // TAMA5 + extended
+    case gbCartData::MapperType::kTama5:
         return &gbDataTAMA5.mapperSeconds;
-    case 0xfe: // HuC3 + Clock
+    case gbCartData::MapperType::kHuC3:
         return &gbRTCHuC3.mapperLastTime;
+    case gbCartData::MapperType::kNone:
+    case gbCartData::MapperType::kMbc1:
+    case gbCartData::MapperType::kMbc2:
+    case gbCartData::MapperType::kMbc5:
+    case gbCartData::MapperType::kMbc6:
+    case gbCartData::MapperType::kMbc7:
+    case gbCartData::MapperType::kPocketCamera:
+    case gbCartData::MapperType::kMmm01:
+    case gbCartData::MapperType::kHuC1:
+    case gbCartData::MapperType::kGameGenie:
+    case gbCartData::MapperType::kGameShark:
+    case gbCartData::MapperType::kUnknown:
+        // Unreachable.
+        assert(false);
+        return nullptr;
     }
-    return NULL;
+    return nullptr;
 }
 
 static size_t gb_rtcdata_size(void)
 {
-    switch (gbRomType) {
-    case 0x0f:
-    case 0x10: // MBC3 + extended
+    switch (g_gbCartData.mapper_type()) {
+    case gbCartData::MapperType::kMbc3:
         return MBC3_RTC_DATA_SIZE;
-    case 0xfd: // TAMA5 + extended
+    case gbCartData::MapperType::kTama5:
         return TAMA5_RTC_DATA_SIZE;
-    case 0xfe: // HuC3 + Clock
+    case gbCartData::MapperType::kHuC3:
         return sizeof(gbRTCHuC3.mapperLastTime);
+    case gbCartData::MapperType::kNone:
+    case gbCartData::MapperType::kMbc1:
+    case gbCartData::MapperType::kMbc2:
+    case gbCartData::MapperType::kMbc5:
+    case gbCartData::MapperType::kMbc6:
+    case gbCartData::MapperType::kMbc7:
+    case gbCartData::MapperType::kPocketCamera:
+    case gbCartData::MapperType::kMmm01:
+    case gbCartData::MapperType::kHuC1:
+    case gbCartData::MapperType::kGameGenie:
+    case gbCartData::MapperType::kGameShark:
+    case gbCartData::MapperType::kUnknown:
+        // Unreachable.
+        assert(false);
+        break;
     }
     return 0;
 }
@@ -196,9 +227,8 @@ static void gbInitRTC(void)
     time(&rawtime);
     lt = localtime(&rawtime);
 
-    switch (gbRomType) {
-    case 0x0f:
-    case 0x10:
+    switch (g_gbCartData.mapper_type()) {
+    case gbCartData::MapperType::kMbc3:
         gbDataMBC3.mapperSeconds = lt->tm_sec;
         gbDataMBC3.mapperMinutes = lt->tm_min;
         gbDataMBC3.mapperHours = lt->tm_hour;
@@ -206,7 +236,7 @@ static void gbInitRTC(void)
         gbDataMBC3.mapperControl = (gbDataMBC3.mapperControl & 0xfe) | (lt->tm_yday > 255 ? 1 : 0);
         gbDataMBC3.mapperLastTime = rawtime;
         break;
-    case 0xfd: {
+    case gbCartData::MapperType::kTama5: {
         uint8_t gbDaysinMonth[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
         int days = lt->tm_yday + 365 * 3;
         gbDataTAMA5.mapperSeconds = lt->tm_sec;
@@ -235,8 +265,23 @@ static void gbInitRTC(void)
             gbDataTAMA5.mapperControl = (gbDataTAMA5.mapperControl & 0xfe) | (lt->tm_yday > 255 ? 1 : 0);
         }
         break;
-    case 0xfe:
+    case gbCartData::MapperType::kHuC3:
         gbRTCHuC3.mapperLastTime = rawtime;
+        break;
+    case gbCartData::MapperType::kNone:
+    case gbCartData::MapperType::kMbc1:
+    case gbCartData::MapperType::kMbc2:
+    case gbCartData::MapperType::kMbc5:
+    case gbCartData::MapperType::kMbc6:
+    case gbCartData::MapperType::kMbc7:
+    case gbCartData::MapperType::kPocketCamera:
+    case gbCartData::MapperType::kMmm01:
+    case gbCartData::MapperType::kHuC1:
+    case gbCartData::MapperType::kGameGenie:
+    case gbCartData::MapperType::kGameShark:
+    case gbCartData::MapperType::kUnknown:
+        // Unreachable.
+        assert(false);
         break;
     }
 }
@@ -278,9 +323,9 @@ void* retro_get_memory_data(unsigned id)
     case IMAGE_GBA:
         switch (id) {
         case RETRO_MEMORY_SAVE_RAM:
-            if ((saveType == GBA_SAVE_EEPROM) | (saveType == GBA_SAVE_EEPROM_SENSOR))
+            if ((coreOptions.saveType == GBA_SAVE_EEPROM) | (coreOptions.saveType == GBA_SAVE_EEPROM_SENSOR))
                 data =  eepromData;
-            else if ((saveType == GBA_SAVE_SRAM) | (saveType == GBA_SAVE_FLASH))
+            else if ((coreOptions.saveType == GBA_SAVE_SRAM) | (coreOptions.saveType == GBA_SAVE_FLASH))
                 data = flashSaveMemory;
             break;
         case RETRO_MEMORY_SYSTEM_RAM:
@@ -295,7 +340,7 @@ void* retro_get_memory_data(unsigned id)
     case IMAGE_GB:
         switch (id) {
         case RETRO_MEMORY_SAVE_RAM:
-            if (gbBattery)
+            if (g_gbCartData.has_battery())
                 data = gbRam;
             break;
         case RETRO_MEMORY_SYSTEM_RAM:
@@ -305,7 +350,7 @@ void* retro_get_memory_data(unsigned id)
             data = (gbCgbMode ? gbVram : (gbMemory + 0x8000));
             break;
         case RETRO_MEMORY_RTC:
-            if (gbRTCPresent)
+            if (g_gbCartData.has_rtc())
                 data = gb_rtcdata_prt();
             break;
         }
@@ -324,11 +369,11 @@ size_t retro_get_memory_size(unsigned id)
     case IMAGE_GBA:
         switch (id) {
         case RETRO_MEMORY_SAVE_RAM:
-            if ((saveType == GBA_SAVE_EEPROM) | (saveType == GBA_SAVE_EEPROM_SENSOR))
+            if ((coreOptions.saveType == GBA_SAVE_EEPROM) | (coreOptions.saveType == GBA_SAVE_EEPROM_SENSOR))
                 size = eepromSize;
-            else if (saveType == GBA_SAVE_FLASH)
+            else if (coreOptions.saveType == GBA_SAVE_FLASH)
                 size = flashSize;
-            else if (saveType == GBA_SAVE_SRAM)
+            else if (coreOptions.saveType == GBA_SAVE_SRAM)
                 size = SIZE_SRAM;
             break;
         case RETRO_MEMORY_SYSTEM_RAM:
@@ -343,8 +388,8 @@ size_t retro_get_memory_size(unsigned id)
     case IMAGE_GB:
         switch (id) {
         case RETRO_MEMORY_SAVE_RAM:
-            if (gbBattery)
-                size = gbRamSize;
+            if (g_gbCartData.has_battery())
+                size = g_gbCartData.ram_size();
             break;
         case RETRO_MEMORY_SYSTEM_RAM:
             size = gbCgbMode ? 0x8000 : 0x2000;
@@ -353,7 +398,7 @@ size_t retro_get_memory_size(unsigned id)
             size = gbCgbMode ? 0x4000 : 0x2000;
             break;
         case RETRO_MEMORY_RTC:
-            if (gbRTCPresent)
+            if (g_gbCartData.has_rtc())
                 size = gb_rtcdata_size();
             break;
         }
@@ -376,6 +421,7 @@ void retro_set_video_refresh(retro_video_refresh_t cb)
 
 void retro_set_audio_sample(retro_audio_sample_t cb)
 {
+    audio_cb = cb;
 }
 
 void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb)
@@ -510,7 +556,8 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 void retro_set_environment(retro_environment_t cb)
 {
    environ_cb = cb;
-   libretro_set_core_options(environ_cb);
+   bool categoriesSupported;
+   libretro_set_core_options(environ_cb, &categoriesSupported);
 }
 
 void retro_get_system_info(struct retro_system_info *info)
@@ -549,18 +596,25 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 
 void retro_init(void)
 {
-   struct retro_log_callback log;
-   struct retro_rumble_interface rumble;
+    // The libretro core uses a few different defaults.
+    coreOptions.mirroringEnable = false;
+    coreOptions.parseDebug = true;
+    coreOptions.cheatsEnabled = 0;
+    coreOptions.skipSaveGameBattery = 0;
+    coreOptions.winGbPrinterEnabled = 0;
 
-   environ_cb(RETRO_ENVIRONMENT_GET_CAN_DUPE, &can_dupe);
-   if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
-      log_cb = log.log;
-   else
-      log_cb = NULL;
+    struct retro_log_callback log;
+    struct retro_rumble_interface rumble;
 
-   const char* dir = NULL;
-   if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
-       snprintf(retro_system_directory, sizeof(retro_system_directory), "%s", dir);
+    environ_cb(RETRO_ENVIRONMENT_GET_CAN_DUPE, &can_dupe);
+    if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
+       log_cb = log.log;
+    else
+       log_cb = NULL;
+
+    const char* dir = NULL;
+    if (environ_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &dir) && dir)
+        snprintf(retro_system_directory, sizeof(retro_system_directory), "%s", dir);
 
 #ifdef FRONTEND_SUPPORTS_RGB565
     systemColorDepth = 16;
@@ -599,7 +653,7 @@ static const char *gbGetCartridgeType(void)
 {
     const char *type = "Unknown";
 
-    switch (gbRom[0x147]) {
+    switch (g_gbCartData.mapper_flag()) {
     case 0x00:
         type = "ROM";
         break;
@@ -690,24 +744,33 @@ static const char *gbGetSaveRamSize(void)
 {
     const char *type = "Unknown";
 
-    switch (gbRom[0x149]) {
+    switch (g_gbCartData.ram_size()) {
     case 0:
         type = "None";
         break;
-    case 1:
+    case k256B:
+        type = "256B";
+        break;
+    case k512B:
+        type = "512B";
+        break;
+    case k2KiB:
         type = "2K";
         break;
-    case 2:
+    case k8KiB:
         type = "8K";
         break;
-    case 3:
+    case k32KiB:
         type = "32K";
         break;
-    case 4:
+    case k64KiB:
+        type = "64K";
+        break;
+    case k128KiB:
         type = "128K";
         break;
-    case 5:
-        type = "64K";
+    default:
+        type = "Unknown";
         break;
     }
 
@@ -721,7 +784,7 @@ typedef struct {
     int saveType;  // 0auto 1eeprom 2sram 3flash 4sensor+eeprom 5none
     int rtcEnabled;
     int mirroringEnabled;
-    int useBios;
+    int useBios; // unused?
 } ini_t;
 
 static const ini_t gbaover[512] = {
@@ -747,11 +810,11 @@ static void load_image_preferences(void)
     unsigned i = 0, found_no = 0;
     unsigned long romCrc32 = crc32(0, rom, romSize);
 
-    cpuSaveType = GBA_SAVE_AUTO;
+    coreOptions.cpuSaveType = GBA_SAVE_AUTO;
     flashSize = SIZE_FLASH512;
     eepromSize = SIZE_EEPROM_512;
-    rtcEnabled = false;
-    mirroringEnable = false;
+    coreOptions.rtcEnabled = false;
+    coreOptions.mirroringEnable = false;
 
     log("File CRC32      : 0x%08X\n", romCrc32);
 
@@ -783,50 +846,50 @@ static void load_image_preferences(void)
     if (found) {
         log("Name            : %s\n", gbaover[found_no].romtitle);
 
-        rtcEnabled = gbaover[found_no].rtcEnabled;
-        cpuSaveType = gbaover[found_no].saveType;
+        coreOptions.rtcEnabled = gbaover[found_no].rtcEnabled;
+        coreOptions.cpuSaveType = gbaover[found_no].saveType;
 
         unsigned size = gbaover[found_no].saveSize;
-        if (cpuSaveType == GBA_SAVE_SRAM)
+        if (coreOptions.cpuSaveType == GBA_SAVE_SRAM)
             flashSize = SIZE_SRAM;
-        else if (cpuSaveType == GBA_SAVE_FLASH)
+        else if (coreOptions.cpuSaveType == GBA_SAVE_FLASH)
             flashSize = (size == SIZE_FLASH1M) ? SIZE_FLASH1M : SIZE_FLASH512;
-        else if ((cpuSaveType == GBA_SAVE_EEPROM) || (cpuSaveType == GBA_SAVE_EEPROM_SENSOR))
+        else if ((coreOptions.cpuSaveType == GBA_SAVE_EEPROM) || (coreOptions.cpuSaveType == GBA_SAVE_EEPROM_SENSOR))
             eepromSize = (size == SIZE_EEPROM_8K) ? SIZE_EEPROM_8K : SIZE_EEPROM_512;
     }
 
     // gameID that starts with 'F' are classic/famicom games
-    mirroringEnable = (buffer[0] == 'F') ? true : false;
+    coreOptions.mirroringEnable = (buffer[0] == 'F') ? true : false;
 
-    if (!cpuSaveType)
+    if (!coreOptions.cpuSaveType)
         utilGBAFindSave(romSize);
 
-    saveType = cpuSaveType;
+    coreOptions.saveType = coreOptions.cpuSaveType;
 
     if (flashSize == SIZE_FLASH512 || flashSize == SIZE_FLASH1M)
         flashSetSize(flashSize);
 
     if (option_forceRTCenable)
-        rtcEnabled = true;
+        coreOptions.rtcEnabled = true;
 
-    rtcEnable(rtcEnabled);
+    rtcEnable(coreOptions.rtcEnabled);
 
     // game code starting with 'R' or 'V' has rumble support
     if ((buffer[0] == 'R') || (buffer[0] == 'V'))
         hasRumble = true;
 
-    rtcEnableRumble(!rtcEnabled && hasRumble);
+    rtcEnableRumble(!coreOptions.rtcEnabled && hasRumble);
 
-    doMirroring(mirroringEnable);
+    doMirroring(coreOptions.mirroringEnable);
 
     log("romSize         : %dKB\n", (romSize + 1023) / 1024);
-    log("has RTC         : %s.\n", rtcEnabled ? "Yes" : "No");
-    log("cpuSaveType     : %s.\n", savetype[cpuSaveType]);
-    if (cpuSaveType == 3)
+    log("has RTC         : %s.\n", coreOptions.rtcEnabled ? "Yes" : "No");
+    log("cpuSaveType     : %s.\n", savetype[coreOptions.cpuSaveType]);
+    if (coreOptions.cpuSaveType == 3)
         log("flashSize       : %d.\n", flashSize);
-    else if (cpuSaveType == 1)
+    else if (coreOptions.cpuSaveType == 1)
         log("eepromSize      : %d.\n", eepromSize);
-    log("mirroringEnable : %s.\n", mirroringEnable ? "Yes" : "No");
+    log("mirroringEnable : %s.\n", coreOptions.mirroringEnable ? "Yes" : "No");
 }
 
 #ifdef _WIN32
@@ -870,7 +933,7 @@ static void gb_init(void)
 
     if (option_useBios) {
         snprintf(biosfile, sizeof(biosfile), "%s%c%s",
-            retro_system_directory, SLASH, biosname[gbCgbMode]);
+            retro_system_directory, SLASH, biosname[gbCgbMode ? 1 : 0]);
         log("Loading bios: %s\n", biosfile);
     }
 
@@ -893,33 +956,19 @@ static void gb_init(void)
     gbReset(); // also resets sound;
     set_gbPalette();
 
-    log("Rom size       : %02x (%dK)\n", gbRom[0x148], (romSize + 1023) / 1024);
-    log("Cartridge type : %02x (%s)\n", gbRom[0x147], gbGetCartridgeType());
-    log("Ram size       : %02x (%s)\n", gbRom[0x149], gbGetSaveRamSize());
+    log("Rom size       : %02x (%dK)\n", g_gbCartData.rom_flag(), (romSize + 1023) / 1024);
+    log("Cartridge type : %02x (%s)\n", g_gbCartData.mapper_flag(), gbGetCartridgeType());
+    log("Ram size       : %02x (%s)\n", g_gbCartData.ram_flag(), gbGetSaveRamSize());
+    log("CRC            : %02x (%02x)\n", g_gbCartData.header_checksum(), g_gbCartData.actual_header_checksum());
+    log("Checksum       : %04x (%04x)\n", g_gbCartData.global_checksum(), g_gbCartData.actual_global_checksum());
 
-    int i = 0;
-    uint8_t crc = 25;
-
-    for (i = 0x134; i < 0x14d; i++)
-        crc += gbRom[i];
-    crc = 256 - crc;
-    log("CRC            : %02x (%02x)\n", crc, gbRom[0x14d]);
-
-    uint16_t crc16 = 0;
-
-    for (i = 0; i < gbRomSize; i++)
-        crc16 += gbRom[i];
-
-    crc16 -= gbRom[0x14e] + gbRom[0x14f];
-    log("Checksum       : %04x (%04x)\n", crc16, gbRom[0x14e] * 256 + gbRom[0x14f]);
-
-    if (gbBattery)
+    if (g_gbCartData.has_battery())
         log("Game supports battery save ram.\n");
-    if (gbRom[0x143] == 0xc0)
+    if (g_gbCartData.RequiresCGB())
         log("Game works on CGB only\n");
-    else if (gbRom[0x143] == 0x80)
+    else if (g_gbCartData.SupportsCGB())
         log("Game supports GBC functions, GB compatible.\n");
-    if (gbRom[0x146] == 0x03)
+    if (g_gbCartData.sgb_support())
         log("Game supports SGB functions\n");
 }
 
@@ -970,7 +1019,7 @@ static bool option_swapAnalogSticks;
 
 static void update_variables(bool startup)
 {
-    struct retro_variable var = {0};
+    struct retro_variable var = { NULL, NULL };
     char key[256] = {0};
     int disabled_layers = 0;
     int sound_enabled = 0x30F;
@@ -985,8 +1034,8 @@ static void update_variables(bool startup)
             disabled_layers |= 0x100 << i;
     }
 
-    layerSettings = 0xFF00 ^ disabled_layers;
-    layerEnable = DISPCNT & layerSettings;
+    coreOptions.layerSettings = 0xFF00 ^ disabled_layers;
+    coreOptions.layerEnable = DISPCNT & coreOptions.layerSettings;
     CPUUpdateRenderBuffers(false);
 
     strcpy(key, "vbam_sound_x");
@@ -1025,8 +1074,8 @@ static void update_variables(bool startup)
     }
 
     if (sound_changed) {
-        soundInterpolation = option_sndInterpolation;
-        soundFiltering     = option_sndFiltering;
+        g_gbaSoundInterpolation = option_sndInterpolation;
+        soundFiltering          = option_sndFiltering;
     }
 
     var.key = "vbam_usebios";
@@ -1056,14 +1105,14 @@ static void update_variables(bool startup)
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
         if (strcmp(var.value, "auto") == 0) {
-            gbBorderAutomatic = 1;
+            gbBorderAutomatic = true;
         }
         else if (!strcmp(var.value, "enabled")) {
-            gbBorderAutomatic = 0;
-            gbBorderOn = 1;
+            gbBorderAutomatic = false;
+            gbBorderOn = false;
         } else { // disabled
-            gbBorderOn = 0;
-            gbBorderAutomatic = 0;
+            gbBorderOn = true;
+            gbBorderAutomatic = false;
         }
 
         if ((type == IMAGE_GB) && !startup)
@@ -1168,7 +1217,7 @@ static void update_variables(bool startup)
     var.value = NULL;
 
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
-        gbColorOption = (!strcmp(var.value, "enabled")) ? 1 : 0;
+        gbColorOption = (!strcmp(var.value, "enabled"));
     }
 
     var.key = "vbam_lcdfilter";
@@ -1204,39 +1253,6 @@ static void update_variables(bool startup)
     }
     else
         ifb_filter_func = NULL;
-
-    var.key = "vbam_show_advanced_options";
-    var.value = NULL;
-
-    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
-        bool newval = (!strcmp(var.value, "enabled")) ? true : false;
-        if ((option_showAdvancedOptions != newval) || startup) {
-            option_showAdvancedOptions = newval;
-            struct retro_core_option_display option_display;
-            unsigned i;
-            char options[][13] = {
-                "vbam_sound_1",
-                "vbam_sound_2",
-                "vbam_sound_3",
-                "vbam_sound_4",
-                "vbam_sound_5",
-                "vbam_sound_6",
-                "vbam_layer_1",
-                "vbam_layer_2",
-                "vbam_layer_3",
-                "vbam_layer_4",
-                "vbam_layer_5",
-                "vbam_layer_6",
-                "vbam_layer_7",
-                "vbam_layer_8"
-            };
-            option_display.visible = option_showAdvancedOptions;
-            for (i = 0; i < (sizeof(options) / sizeof(options[0])); i++) {
-                option_display.key = options[i];
-                environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &option_display);
-            }
-        }
-    }
 
     // Hide some core options depending on rom image type
     if (startup) {
@@ -1421,21 +1437,35 @@ void retro_run(void)
         firstrun = false;
         /* Check if GB game has RTC data. Has to be check here since this is where the data will be
          * available when using libretro api. */
-        if ((type == IMAGE_GB) && gbRTCPresent) {
-            switch (gbRomType) {
-            case 0x0f:
-            case 0x10:
+        if ((type == IMAGE_GB) && g_gbCartData.has_rtc()) {
+            switch (g_gbCartData.mapper_type()) {
+            case gbCartData::MapperType::kMbc3:
                 /* Check if any RTC has been loaded, zero value means nothing has been loaded. */
                 if (!gbDataMBC3.mapperLastTime)
                     initRTC = true;
                 break;
-            case 0xfd:
+            case gbCartData::MapperType::kTama5:
                 if (!gbDataTAMA5.mapperLastTime)
                     initRTC = true;
                 break;
-            case 0xfe:
+            case gbCartData::MapperType::kHuC3:
                 if (!gbRTCHuC3.mapperLastTime)
                     initRTC = true;
+                break;
+            case gbCartData::MapperType::kNone:
+            case gbCartData::MapperType::kMbc1:
+            case gbCartData::MapperType::kMbc2:
+            case gbCartData::MapperType::kMbc5:
+            case gbCartData::MapperType::kMbc6:
+            case gbCartData::MapperType::kMbc7:
+            case gbCartData::MapperType::kPocketCamera:
+            case gbCartData::MapperType::kMmm01:
+            case gbCartData::MapperType::kHuC1:
+            case gbCartData::MapperType::kGameGenie:
+            case gbCartData::MapperType::kGameShark:
+            case gbCartData::MapperType::kUnknown:
+                // Unreachable.
+                assert(false);
                 break;
             }
             /* Initialize RTC using local time if needed */
@@ -1469,20 +1499,20 @@ size_t retro_serialize_size(void)
 bool retro_serialize(void* data, size_t size)
 {
     if (size == serialize_size)
-        return core->emuWriteState((uint8_t*)data, size);
+        return core->emuWriteState((uint8_t*)data);
     return false;
 }
 
 bool retro_unserialize(const void* data, size_t size)
 {
     if (size == serialize_size)
-        return core->emuReadState((uint8_t*)data, size);
+        return core->emuReadState((uint8_t*)data);
     return false;
 }
 
 void retro_cheat_reset(void)
 {
-    cheatsEnabled = 1;
+    coreOptions.cheatsEnabled = 1;
     if (type == IMAGE_GBA)
         cheatsDeleteAll(false);
     else if (type == IMAGE_GB)
@@ -1709,7 +1739,7 @@ bool retro_load_game(const struct retro_game_info *game)
    update_input_descriptors();    // Initialize input descriptors and info
    update_variables(false);
    uint8_t* state_buf = (uint8_t*)malloc(2000000);
-   serialize_size = core->emuWriteState(state_buf, 2000000);
+   serialize_size = core->emuWriteState(state_buf);
    free(state_buf);
 
    emulating = 1;
@@ -1918,7 +1948,7 @@ void systemShowSpeed(int)
 {
 }
 
-void system10Frames(int)
+void system10Frames()
 {
 }
 

@@ -1,4 +1,6 @@
 #include "viewsupt.h"
+
+#include "config/option-proxy.h"
 #include "wxvbam.h"
 #include "wxutil.h"
 
@@ -773,7 +775,7 @@ ColorView::ColorView(wxWindow* parent, wxWindowID id)
         wxBORDER_SUNKEN);
     sz->Add(cp);
     wxGridSizer* gs = new wxGridSizer(2);
-    wxStaticText* lab = new wxStaticText(this, wxID_ANY, _("R:"));
+    wxStaticText* lab = new wxStaticText(this, wxID_ANY, _("Red:"));
     gs->Add(lab, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     rt = new wxStaticText(this, wxID_ANY, wxT("255"), wxDefaultPosition,
 #if !defined(__WXGTK__)
@@ -782,7 +784,7 @@ ColorView::ColorView(wxWindow* parent, wxWindowID id)
         wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
 #endif // !defined(__WXGTK__)
     gs->Add(rt, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
-    lab = new wxStaticText(this, wxID_ANY, _("G:"));
+    lab = new wxStaticText(this, wxID_ANY, _("Green:"));
     gs->Add(lab, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     gt = new wxStaticText(this, wxID_ANY, wxT("255"), wxDefaultPosition,
 #if !defined(__WXGTK__)
@@ -791,7 +793,7 @@ ColorView::ColorView(wxWindow* parent, wxWindowID id)
         wxDefaultSize, wxALIGN_CENTRE_HORIZONTAL);
 #endif // !defined(__WXGTK__)
     gs->Add(gt, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
-    lab = new wxStaticText(this, wxID_ANY, _("B:"));
+    lab = new wxStaticText(this, wxID_ANY, _("Blue:"));
     gs->Add(lab, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     bt = new wxStaticText(this, wxID_ANY, wxT("255"), wxDefaultPosition,
 #if !defined(__WXGTK__)
@@ -1166,20 +1168,21 @@ void GfxViewer::SaveBMP(wxCommandEvent& ev)
 {
     (void)ev; // unused params
     GameArea* panel = wxGetApp().frame->GetPanel();
-    bmp_save_dir = wxGetApp().frame->GetGamePath(gopts.scrshot_dir);
+    bmp_save_dir = wxGetApp().frame->GetGamePath(OPTION(kGenScreenshotDir));
     // no attempt is made here to translate the dialog type name
     // it's just a suggested name, anyway
     wxString def_name = panel->game_name() + wxT('-') + dname;
     def_name.resize(def_name.size() - 6); // strlen("Viewer")
 
-    if (captureFormat)
-        def_name += wxT(".bmp");
+    const int capture_format = OPTION(kPrefCaptureFormat);
+    if (capture_format == 0)
+        def_name.append(".png");
     else
-        def_name += wxT(".png");
+        def_name.append(".bmp");
 
     wxFileDialog dlg(GetGrandParent(), _("Select output file"), bmp_save_dir, def_name,
         _("PNG images|*.png|BMP images|*.bmp"), wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
-    dlg.SetFilterIndex(captureFormat);
+    dlg.SetFilterIndex(capture_format);
     int ret = dlg.ShowModal();
     bmp_save_dir = dlg.GetDirectory();
 

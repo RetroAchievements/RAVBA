@@ -1,43 +1,494 @@
-//#include "../win32/stdafx.h" // would fix LNK2005 linker errors for MSVC
+#include "gb.h"
+
+#include <array>
+#include <cassert>
 #include <cmath>
-#include <assert.h>
-#include <memory.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
 
 #include "../NLS.h"
 #include "../System.h"
 #include "../Util.h"
-#include "../common/ConfigManager.h"
+#include "../common/sizes.h"
 #include "../gba/GBALink.h"
 #include "../gba/Sound.h"
-#include "gb.h"
 #include "gbCheats.h"
 #include "gbGlobals.h"
 #include "gbMemory.h"
 #include "gbSGB.h"
 #include "gbSound.h"
 
+#ifndef __LIBRETRO__
+#include "../common/Patch.h"
+#endif  // __LIBRETRO__
+
 #ifdef __GNUC__
 #define _stricmp strcasecmp
 #endif
 
 extern uint8_t* pix;
-bool gbUpdateSizes();
-bool inBios = false;
 
+namespace {
+
+// Mapper functions.
+void (*g_mapper)(uint16_t, uint8_t) = nullptr;
+void (*g_mapperRAM)(uint16_t, uint8_t) = nullptr;
+uint8_t (*g_mapperReadRAM)(uint16_t) = nullptr;
+void (*g_mapperUpdateClock)() = nullptr;
+
+// Set to true on battery load error.
+bool g_gbBatteryError = false;
+
+#ifndef __LIBRETRO__
+
+// This structure is used to save and restore the battery-backed RAM. It is
+// similar to the iovec structure used in Linux.
+struct VBamIoVec {
+    // Pointer to the raw data.
+    void* data;
+    // Data length.
+    size_t length;
+    // Optional leeway for compatibility with older versions.
+    int leeway = 0;
+    // Optional action to take on read failure.
+    // If this is set, `g_gbBatteryError` will not be set.
+    void (*action_on_failure)() = nullptr;
+};
+std::vector<VBamIoVec> g_vbamIoVecs;
+
+void ResetMBC3RTC() {
+    time(&gbDataMBC3.mapperLastTime);
+    struct tm* lt;
+    lt = localtime(&gbDataMBC3.mapperLastTime);
+    gbDataMBC3.mapperSeconds = lt->tm_sec;
+    gbDataMBC3.mapperMinutes = lt->tm_min;
+    gbDataMBC3.mapperHours = lt->tm_hour;
+    gbDataMBC3.mapperDays = lt->tm_yday & 255;
+    gbDataMBC3.mapperControl =
+        (gbDataMBC3.mapperControl & 0xfe) | (lt->tm_yday > 255 ? 1 : 0);
+}
+
+void ResetTama5RTC() {
+    uint8_t gbDaysinMonth[12] = {31, 28, 31, 30, 31, 30,
+                                 31, 31, 30, 31, 30, 31};
+    time(&gbDataTAMA5.mapperLastTime);
+    struct tm* lt;
+    lt = localtime(&gbDataTAMA5.mapperLastTime);
+    gbDataTAMA5.mapperSeconds = lt->tm_sec;
+    gbDataTAMA5.mapperMinutes = lt->tm_min;
+    gbDataTAMA5.mapperHours = lt->tm_hour;
+    gbDataTAMA5.mapperDays = 1;
+    gbDataTAMA5.mapperMonths = 1;
+    gbDataTAMA5.mapperYears = 1970;
+    int days = lt->tm_yday + 365 * 3;
+    while (days) {
+        gbDataTAMA5.mapperDays++;
+        days--;
+        if (gbDataTAMA5.mapperDays >
+            gbDaysinMonth[gbDataTAMA5.mapperMonths - 1]) {
+            gbDataTAMA5.mapperDays = 1;
+            gbDataTAMA5.mapperMonths++;
+            if (gbDataTAMA5.mapperMonths > 12) {
+                gbDataTAMA5.mapperMonths = 1;
+                gbDataTAMA5.mapperYears++;
+                if ((gbDataTAMA5.mapperYears & 3) == 0)
+                    gbDaysinMonth[1] = 29;
+                else
+                    gbDaysinMonth[1] = 28;
+            }
+        }
+    }
+    gbDataTAMA5.mapperControl =
+        (gbDataTAMA5.mapperControl & 0xfe) | (lt->tm_yday > 255 ? 1 : 0);
+}
+
+void ResetHuc3RTC() {
+    time(&gbRTCHuC3.mapperLastTime);
+    localtime(&gbRTCHuC3.mapperLastTime);
+}
+
+bool WriteBatteryFile(const char* file_name) {
+    if (g_gbBatteryError) {
+        return false;
+    }
+    if (!g_gbCartData.has_battery()) {
+        return true;
+    }
+
+    FILE* file = utilOpenFile(file_name, "wb");
+    if (file == nullptr) {
+        systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"),
+                      file_name);
+        return false;
+    }
+
+    for (const VBamIoVec& vec : g_vbamIoVecs) {
+        fwrite(vec.data, 1, vec.length, file);
+    }
+
+    fclose(file);
+    return true;
+}
+
+bool ReadBatteryFile(const char* file_name) {
+    systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
+    if (!g_gbCartData.has_battery()) {
+        return false;
+    }
+
+    gzFile gzFile = utilAutoGzOpen(file_name, "rb");
+    if (gzFile == nullptr) {
+        return false;
+    }
+
+    bool ret = true;
+    int total_read = 0;
+    for (const VBamIoVec& vec : g_vbamIoVecs) {
+        const int sizeToRead = vec.length;
+        const int sizeToReadWithLeeway = sizeToRead + vec.leeway;
+        const int read = gzread(gzFile, vec.data, sizeToRead);
+        total_read += read;
+        if (read < 0 || (read != sizeToRead && read != sizeToReadWithLeeway)) {
+            if (vec.action_on_failure) {
+                systemMessage(
+                    MSG_FAILED_TO_READ_RTC,
+                    N_("Failed to read RTC from save game %s (continuing)"),
+                    file_name);
+                ret = false;
+                vec.action_on_failure();
+            } else {
+                systemMessage(
+                    MSG_FAILED_TO_READ_SGM,
+                    N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning: save of the battery file is now disabled!"),
+                    file_name,
+                    total_read);
+                g_gbBatteryError = true;
+                gzclose(gzFile);
+                ret = false;
+                break;
+            }
+        }
+    }
+
+    if (!ret) {
+        // No need to perform any further check, just close the file.
+        gzclose(gzFile);
+        return false;
+    }
+
+    // Check if the battery file is larger than expected.
+    uint8_t data = 0;
+    const int read = gzread(gzFile, &data, 1);
+    total_read += read;
+    if (read != 0) {
+        systemMessage(
+            MSG_FAILED_TO_READ_SGM,
+            N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning: save of the battery file is now disabled!"),
+            file_name, total_read);
+        g_gbBatteryError = true;
+        ret = false;
+    }
+
+    if (gzclose(gzFile) != Z_OK) {
+        systemMessage(MSG_FAILED_TO_READ_SGM,
+                      N_("Battery file is corrupted (%s).\nWarning: save of the battery file is now disabled!"),
+                      file_name);
+        g_gbBatteryError = true;
+        ret = false;
+    }
+
+    return ret;
+}
+
+#endif // !__LIBRETRO__
+
+#if !defined(FINAL_VERSION)
 // debugging
 bool memorydebug = false;
-char gbBuffer[2048];
+#endif  // FINAL_VERSION
 
-extern uint16_t gbLineMix[160];
+// These are the default palettes when launching a GB game for GBC, GBA and
+// GBA SP, respectively.
+static constexpr std::array<uint16_t, 0x40> kGbGbcPalette = {
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x0600, 0xfdf3, 0x041c, 0xf5db, 0x4419, 0x57ea, 0x2808, 0x9b75,
+    0x129b, 0xfce0, 0x22da, 0x4ac5, 0x2d71, 0xf0c2, 0x5137, 0x2d41,
+    0x6b2d, 0x2215, 0xbe0a, 0xc053, 0xfe5f, 0xe000, 0xbe10, 0x914d,
+    0x7f91, 0x02b5, 0x77ac, 0x14e5, 0xcf89, 0xa03d, 0xfd50, 0x91ff,
+};
 
-// mappers
-void (*mapper)(uint16_t, uint8_t) = NULL;
-void (*mapperRAM)(uint16_t, uint8_t) = NULL;
-uint8_t (*mapperReadRAM)(uint16_t) = NULL;
-void (*mapperUpdateClock)() = NULL;
+static constexpr std::array<uint16_t, 0x40> kGbGbaPalette = {
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0xbe00, 0xfdfd, 0xbd69, 0x7baf, 0xf5ff, 0x3f8f, 0xcee5, 0x5bf7,
+    0xb35b, 0xef97, 0xef9f, 0x97f7, 0x82bf, 0x9f3d, 0xddde, 0xbad5,
+    0x3cba, 0xdfd7, 0xedea, 0xfeda, 0xf7f9, 0xfdee, 0x6d2f, 0xf0e6,
+    0xf7f0, 0xf296, 0x3bf1, 0xe211, 0x69ba, 0x3d0d, 0xdfd3, 0xa6ba,
+};
+
+static constexpr std::array<uint16_t, 0x40> kGbGbaSpPalette = {
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff, 0x7fff,
+    0x9c00, 0x6340, 0x10c6, 0xdb97, 0x7622, 0x3e57, 0x2e12, 0x95c3,
+    0x1095, 0x488c, 0x8241, 0xde8c, 0xfabc, 0x0e81, 0x7675, 0xfdec,
+    0xddfd, 0x5995, 0x066a, 0xed1e, 0x1e84, 0x1d14, 0x11c3, 0x2749,
+    0xa727, 0x6266, 0xe27b, 0xe3fc, 0x1f76, 0xf158, 0x468e, 0xa540,
+};
+
+static constexpr size_t kTama5RamSize = k256B;
+
+int gbGetValue(int min, int max, int v) {
+    return (int)(min + (float)(max - min) *
+                           (2.0 * (v / 31.0) - (v / 31.0) * (v / 31.0)));
+}
+
+void gbGenFilter() {
+    for (int r = 0; r < 32; r++) {
+        for (int g = 0; g < 32; g++) {
+            for (int b = 0; b < 32; b++) {
+                int nr =
+                    gbGetValue(gbGetValue(4, 14, g), gbGetValue(24, 29, g), r) -
+                    4;
+                int ng = gbGetValue(gbGetValue(4 + gbGetValue(0, 5, r),
+                                               14 + gbGetValue(0, 3, r), b),
+                                    gbGetValue(24 + gbGetValue(0, 3, r),
+                                               29 + gbGetValue(0, 1, r), b),
+                                    g) -
+                         4;
+                int nb = gbGetValue(gbGetValue(4 + gbGetValue(0, 5, r),
+                                               14 + gbGetValue(0, 3, r), g),
+                                    gbGetValue(24 + gbGetValue(0, 3, r),
+                                               29 + gbGetValue(0, 1, r), g),
+                                    b) -
+                         4;
+                gbColorFilter[(b << 10) | (g << 5) | r] =
+                    (nb << 10) | (ng << 5) | nr;
+            }
+        }
+    }
+}
+
+// Initializes the `g_gbCartData` variable with the data in `gbRom`, expecting a
+// size of `romSize` bytes. Returns true on success.
+bool gbInitializeRom(size_t romSize) {
+    g_gbCartData = gbCartData(gbRom, romSize);
+
+    if (!g_gbCartData) {
+        switch (g_gbCartData.validity()) {
+            case gbCartData::Validity::kValid:
+            case gbCartData::Validity::kUninitialized:
+                // Unreachable.
+                assert(false);
+                break;
+            case gbCartData::Validity::kSizeTooSmall:
+                systemMessage(MSG_UNSUPPORTED_ROM_SIZE,
+                              N_("Unsupported rom size %02x"), romSize);
+                break;
+            case gbCartData::Validity::kUnknownMapperType:
+                systemMessage(MSG_UNKNOWN_CARTRIDGE_TYPE,
+                              N_("Unknown cartridge type %02x"),
+                              g_gbCartData.mapper_flag());
+                break;
+            case gbCartData::Validity::kUnknownRomSize:
+                systemMessage(MSG_UNSUPPORTED_ROM_SIZE,
+                              N_("Unsupported rom size %02x"),
+                              g_gbCartData.rom_flag());
+                break;
+            case gbCartData::Validity::kUnknownRamSize:
+                systemMessage(MSG_UNSUPPORTED_RAM_SIZE,
+                              N_("Unsupported ram size %02x"),
+                              g_gbCartData.ram_flag());
+                break;
+            case gbCartData::Validity::kNoNintendoLogo:
+                systemMessage(MSG_INVALID_GAME_BOY_NINTENDO_LOGO,
+                              N_("No Nintendo logo in header"));
+                break;
+            case gbCartData::Validity::kInvalidHeaderChecksum:
+                systemMessage(
+                    MSG_INVALID_HEADER_CHECKSUM,
+                    N_("Invalid header checksum. Found: %02x. Expected: %02x"),
+                    g_gbCartData.header_checksum(),
+                    g_gbCartData.actual_header_checksum());
+                break;
+        }
+        g_gbCartData = gbCartData();
+        return false;
+    }
+
+    // We ignore romSize > romHeaderSize here, for backwards compatibility. This
+    // is necessary for some ROM hacks.
+    const size_t romHeaderSize = g_gbCartData.rom_size();
+    if (romSize < romHeaderSize) {
+        uint8_t* gbRomNew = (uint8_t*)realloc(gbRom, romHeaderSize);
+        if (!gbRomNew) {
+            return false;
+        };
+        gbRom = gbRomNew;
+
+        // Not sure if it's 0x00, 0xff or random data.
+        std::fill(gbRom + romSize, gbRom + romHeaderSize, (uint8_t)0);
+    }
+
+    // Override for compatibility.
+    gbRom[0x147] = g_gbCartData.mapper_flag();
+
+    // The initial RAM byte value.
+    uint8_t gbRamFill = 0xff;
+
+    switch (g_gbCartData.mapper_type()) {
+        case gbCartData::MapperType::kNone:
+        case gbCartData::MapperType::kMbc1:
+            g_mapper = mapperMBC1ROM;
+            g_mapperRAM = mapperMBC1RAM;
+            g_mapperReadRAM = mapperMBC1ReadRAM;
+            break;
+        case gbCartData::MapperType::kMbc2:
+            g_mapper = mapperMBC2ROM;
+            g_mapperRAM = mapperMBC2RAM;
+            break;
+        case gbCartData::MapperType::kMmm01:
+            g_mapper = mapperMMM01ROM;
+            g_mapperRAM = mapperMMM01RAM;
+            break;
+        case gbCartData::MapperType::kMbc3:
+        case gbCartData::MapperType::kPocketCamera:
+            g_mapper = mapperMBC3ROM;
+            g_mapperRAM = mapperMBC3RAM;
+            g_mapperReadRAM = mapperMBC3ReadRAM;
+            break;
+        case gbCartData::MapperType::kMbc5:
+            g_mapper = mapperMBC5ROM;
+            g_mapperRAM = mapperMBC5RAM;
+            g_mapperReadRAM = mapperMBC5ReadRAM;
+            break;
+        case gbCartData::MapperType::kMbc7:
+            g_mapper = mapperMBC7ROM;
+            g_mapperRAM = mapperMBC7RAM;
+            g_mapperReadRAM = mapperMBC7ReadRAM;
+            break;
+        case gbCartData::MapperType::kGameGenie:
+            // Clean-up Game Genie hardware registers.
+            for (int i = 0; i < 0x20; i++) {
+                gbRom[0x4000 + i] = 0;
+            }
+            g_mapper = mapperGGROM;
+            break;
+        case gbCartData::MapperType::kGameShark:
+            g_mapper = mapperGS3ROM;
+            break;
+        case gbCartData::MapperType::kTama5:
+            gbRamFill = 0x00;
+            if (gbTAMA5ram == nullptr) {
+                gbTAMA5ram = (uint8_t*)calloc(1, kTama5RamSize);
+                if (gbTAMA5ram == nullptr) {
+                    return false;
+                }
+            }
+
+            g_mapperRAM = mapperTAMA5RAM;
+            g_mapperReadRAM = mapperTAMA5ReadRAM;
+            g_mapperUpdateClock = memoryUpdateTAMA5Clock;
+            break;
+        case gbCartData::MapperType::kHuC3:
+            g_mapper = mapperHuC3ROM;
+            g_mapperRAM = mapperHuC3RAM;
+            g_mapperReadRAM = mapperHuC3ReadRAM;
+            break;
+        case gbCartData::MapperType::kHuC1:
+            g_mapper = mapperHuC1ROM;
+            g_mapperRAM = mapperHuC1RAM;
+            break;
+        default:
+            systemMessage(MSG_UNKNOWN_CARTRIDGE_TYPE,
+                          N_("Unknown cartridge type"));
+            return false;
+    }
+
+    // We need to explicitly reset gbRam here as the patch application process
+    // may have changed the RAM size.
+    if (gbRam != nullptr) {
+        free(gbRam);
+        gbRam = nullptr;
+    }
+
+    const size_t ramSize = g_gbCartData.ram_size();
+    if (g_gbCartData.HasRam()) {
+        // Always allocate 4 KiB to prevent access issues down the line.
+        gbRam = (uint8_t*)malloc(std::max(k4KiB, ramSize));
+        if (gbRam == nullptr) {
+            return false;
+        }
+        memset(gbRam, gbRamFill, ramSize);
+    }
+
+    gbGenFilter();
+    gbSgbInit();
+    setColorizerHack(false);
+
+#if !defined(__LIBRETRO__)
+
+    // Populate the IO vectors for battery save/load.
+    g_vbamIoVecs.clear();
+    if (g_gbCartData.has_battery()) {
+        if (g_gbCartData.HasRam()) {
+            g_vbamIoVecs.push_back({gbRam, ramSize});
+        }
+
+        switch (g_gbCartData.mapper_type()) {
+            case gbCartData::MapperType::kMbc3:
+                if (g_gbCartData.has_rtc()) {
+                    g_vbamIoVecs.push_back({&gbDataMBC3.mapperSeconds,
+                                            MBC3_RTC_DATA_SIZE, -4,
+                                            &ResetMBC3RTC});
+                }
+                break;
+            case gbCartData::MapperType::kTama5:
+                g_vbamIoVecs.push_back({gbTAMA5ram, kTama5RamSize});
+                g_vbamIoVecs.push_back({&gbDataTAMA5.mapperSeconds,
+                                        TAMA5_RTC_DATA_SIZE, -4,
+                                        &ResetTama5RTC});
+                break;
+            case gbCartData::MapperType::kHuC3:
+                g_vbamIoVecs.push_back({&gbRTCHuC3.mapperLastTime,
+                                        HUC3_RTC_DATA_SIZE, -4,
+                                        &ResetHuc3RTC});
+                break;
+            case gbCartData::MapperType::kNone:
+            case gbCartData::MapperType::kMbc1:
+            case gbCartData::MapperType::kMbc2:
+            case gbCartData::MapperType::kMbc5:
+            case gbCartData::MapperType::kMbc6:
+            case gbCartData::MapperType::kMbc7:
+            case gbCartData::MapperType::kHuC1:
+            case gbCartData::MapperType::kMmm01:
+            case gbCartData::MapperType::kPocketCamera:
+            case gbCartData::MapperType::kGameGenie:
+            case gbCartData::MapperType::kGameShark:
+            case gbCartData::MapperType::kUnknown:
+                // Do nothing more.
+                break;
+        }
+    }
+
+#endif  // !defined(__LIBRETRO__)
+
+    return true;
+}
+
+}  // namespace
+
+bool inBios = false;
+
+extern uint16_t gbLineMix[kGBWidth];
 
 // registers
 gbRegister PC;
@@ -109,16 +560,15 @@ int GBSYNCHRONIZE_CLOCK_TICKS = 52920;
 // state variables
 
 // general
+gbCartData g_gbCartData;
 int clockTicks = 0;
 bool gbSystemMessage = false;
 int gbGBCColorType = 0;
 int gbHardware = 0;
-int gbRomType = 0;
 int gbRemainingClockTicks = 0;
 int gbOldClockTicks = 0;
 int gbIntBreak = 0;
 int gbInterruptLaunched = 0;
-uint8_t gbCheatingDevice = 0; // 1 = GS, 2 = GG
 // breakpoint
 bool breakpoint = false;
 // interrupt
@@ -139,7 +589,6 @@ bool gbIncreased = false;
 // writing to register_DIV...
 int gbInternalTimer = 0x55;
 const uint8_t gbTimerMask[4] = { 0xff, 0x3, 0xf, 0x3f };
-const uint8_t gbTimerBug[8] = { 0x80, 0x80, 0x02, 0x02, 0x0, 0xff, 0x0, 0xff };
 bool gbTimerModeChange = false;
 bool gbTimerOnChange = false;
 // lcd
@@ -190,58 +639,13 @@ int gbFrameSkip = 0;
 int gbFrameSkipCount = 0;
 // timing
 uint32_t gbLastTime = 0;
-uint32_t gbElapsedTime = 0;
-uint32_t gbTimeNow = 0;
 int gbSynchronizeTicks = GBSYNCHRONIZE_CLOCK_TICKS;
 // emulator features
-int gbBattery = 0;
-int gbRumble = 0;
-int gbRTCPresent = 0;
-bool gbBatteryError = false;
 int gbCaptureNumber = 0;
 bool gbCapture = false;
 bool gbCapturePrevious = false;
 int gbJoymask[4] = { 0, 0, 0, 0 };
 static bool allow_colorizer_hack;
-
-uint8_t gbRamFill = 0xff;
-
-int gbRomSizes[] = {
-    0x00008000, // 32K
-    0x00010000, // 64K
-    0x00020000, // 128K
-    0x00040000, // 256K
-    0x00080000, // 512K
-    0x00100000, // 1024K
-    0x00200000, // 2048K
-    0x00400000, // 4096K
-    0x00800000 // 8192K
-};
-int gbRomSizesMasks[] = { 0x00007fff,
-    0x0000ffff,
-    0x0001ffff,
-    0x0003ffff,
-    0x0007ffff,
-    0x000fffff,
-    0x001fffff,
-    0x003fffff,
-    0x007fffff };
-
-int gbRamSizes[6] = {
-    0x00000000, // 0K
-    0x00002000, // 2K  // Changed to 2000 to avoid problems with gbMemoryMap...
-    0x00002000, // 8K
-    0x00008000, // 32K
-    0x00020000, // 128K
-    0x00010000 // 64K
-};
-
-int gbRamSizesMasks[6] = { 0x00000000,
-    0x000007ff,
-    0x00001fff,
-    0x00007fff,
-    0x0001ffff,
-    0x0000ffff };
 
 int gbCycles[] = {
     //  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
@@ -779,34 +1183,6 @@ static const uint16_t gbColorizationPaletteData[32][3][4] = {
 #define GBSAVE_GAME_VERSION_12 12
 #define GBSAVE_GAME_VERSION GBSAVE_GAME_VERSION_12
 
-
-static bool gbCheckRomHeader(void)
-{
-    const uint8_t nlogo[16] = {
-        0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B,
-        0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D
-    };
-
-    // Game Genie
-    if ((gbRom[2] == 0x6D) && (gbRom[5] == 0x47) && (gbRom[6] == 0x65) && (gbRom[7] == 0x6E) &&
-            (gbRom[8] == 0x69) && (gbRom[9] == 0x65) && (gbRom[0xA] == 0x28) && (gbRom[0xB] == 0x54)) {
-        return true;
-
-    // Game Shark
-    } else if (((gbRom[0x104] == 0x44) && (gbRom[0x156] == 0xEA) && (gbRom[0x158] == 0x7F) && (gbRom[0x159] == 0xEA) && (gbRom[0x15B] == 0x7F)) ||
-            ((gbRom[0x165] == 0x3E) && (gbRom[0x166] == 0xD9) && (gbRom[0x16D] == 0xE1) && (gbRom[0x16E] == 0x7F))) {
-        return true;
-
-    // check for 1st 16 bytes of nintendo logo
-    } else {
-        uint8_t header[16];
-        memcpy(header, &gbRom[0x104], 16);
-        if (!memcmp(header, nlogo, 16))
-            return true;
-    }
-    return false;
-}
-
 void setColorizerHack(bool value)
 {
     allow_colorizer_hack = value;
@@ -850,37 +1226,6 @@ static inline bool gbCgbPaletteAccessValid(void)
         (gbSpeed && ((gbLcdMode == 1) || (gbLcdMode == 2) || ((gbLcdMode == 3) && (gbLcdTicks > (GBLCD_MODE_3_CLOCK_TICKS - 2))) || ((gbLcdMode == 0) && (gbLcdTicks <= (GBLCD_MODE_0_CLOCK_TICKS - gbSpritesTicks[299] - 2))))))
         return true;
     return false;
-}
-
-int inline gbGetValue(int min, int max, int v)
-{
-    return (int)(min + (float)(max - min) * (2.0 * (v / 31.0) - (v / 31.0) * (v / 31.0)));
-}
-
-void gbGenFilter()
-{
-    for (int r = 0; r < 32; r++) {
-        for (int g = 0; g < 32; g++) {
-            for (int b = 0; b < 32; b++) {
-                int nr = gbGetValue(gbGetValue(4, 14, g),
-                             gbGetValue(24, 29, g), r)
-                    - 4;
-                int ng = gbGetValue(gbGetValue(4 + gbGetValue(0, 5, r),
-                                        14 + gbGetValue(0, 3, r), b),
-                             gbGetValue(24 + gbGetValue(0, 3, r),
-                                        29 + gbGetValue(0, 1, r), b),
-                             g)
-                    - 4;
-                int nb = gbGetValue(gbGetValue(4 + gbGetValue(0, 5, r),
-                                        14 + gbGetValue(0, 3, r), g),
-                             gbGetValue(24 + gbGetValue(0, 3, r),
-                                        29 + gbGetValue(0, 1, r), g),
-                             b)
-                    - 4;
-                gbColorFilter[(b << 10) | (g << 5) | r] = (nb << 10) | (ng << 5) | nr;
-            }
-        }
-    }
 }
 
 bool gbIsGameboyRom(char* file)
@@ -989,8 +1334,8 @@ void gbWriteMemory(uint16_t address, uint8_t value)
         }
 
 #endif
-        if (mapper)
-            (*mapper)(address, value);
+        if (g_mapper)
+            (*g_mapper)(address, value);
         return;
     }
 
@@ -1015,9 +1360,9 @@ void gbWriteMemory(uint16_t address, uint8_t value)
         }
 #endif
 
-        // Is that a correct fix ??? (it used to be 'if (mapper)')...
-        if (mapperRAM)
-            (*mapperRAM)(address, value);
+        // Is that a correct fix ??? (it used to be 'if (g_mapper)')...
+        if (g_mapperRAM)
+            (*g_mapperRAM)(address, value);
         return;
     }
 
@@ -1067,7 +1412,7 @@ void gbWriteMemory(uint16_t address, uint8_t value)
         EmuReseted = false;
         gbMemory[0xff02] = value;
         if (gbSerialOn && (GetLinkMode() == LINK_GAMEBOY_IPC || GetLinkMode() == LINK_GAMEBOY_SOCKET
-        || GetLinkMode() == LINK_DISCONNECTED || winGbPrinterEnabled)) {
+        || GetLinkMode() == LINK_DISCONNECTED || coreOptions.winGbPrinterEnabled)) {
 
             gbSerialTicks = GBSERIAL_CLOCK_TICKS;
 
@@ -1290,7 +1635,7 @@ void gbWriteMemory(uint16_t address, uint8_t value)
 
                 //  systemDrawScreen();
 
-                gbRegisterLYLCDCOffOn = (register_LY + 144) % 154;
+                gbRegisterLYLCDCOffOn = (register_LY + kGBHeight) % 154;
 
                 gbLcdTicks = GBLCD_MODE_2_CLOCK_TICKS - (gbSpeed ? 2 : 1);
                 gbLcdTicksDelayed = GBLCD_MODE_2_CLOCK_TICKS - (gbSpeed ? 1 : 0);
@@ -1537,7 +1882,7 @@ void gbWriteMemory(uint16_t address, uint8_t value)
     // WY
     case 0x4a:
         gbMemory[0xff4a] = register_WY = value;
-        if ((register_LY <= register_WY) && ((gbWindowLine < 0) || (gbWindowLine >= 144))) {
+        if ((register_LY <= register_WY) && ((gbWindowLine < 0) || (gbWindowLine >= (int)kGBHeight))) {
             gbWindowLine = -1;
             oldRegister_WY = register_WY;
         }
@@ -1582,7 +1927,7 @@ void gbWriteMemory(uint16_t address, uint8_t value)
             }
             inBios = false;
         }
-    }
+    } break;
 
     // HDMA1
     case 0x51: {
@@ -1776,7 +2121,7 @@ void gbWriteMemory(uint16_t address, uint8_t value)
             gbMemory[0xff70] = register_SVBK = value;
             return;
         }
-    }
+    } break;
 
     case 0x75: {
         gbMemory[0xff75] = 0x8f | value;
@@ -1827,9 +2172,10 @@ uint8_t gbReadMemory(uint16_t address)
         // for the 2kb ram limit (fixes crash in shawu's story
         // but now its sram test fails, as the it expects 8kb and not 2kb...
         // So use the 'genericflashcard' option to fix it).
-        if (address <= (0xa000 + gbRamSizeMask)) {
-            if (mapperReadRAM)
-                return mapperReadRAM(address);
+        if (address <= (0xa000 + g_gbCartData.ram_mask())) {
+            if (g_mapperReadRAM) {
+                return g_mapperReadRAM(address);
+            }
             return gbMemoryMap[address >> 12][address & 0x0fff];
         }
         return 0xff;
@@ -2185,6 +2531,8 @@ bool CPUIsGBBios(const char* file)
         const char* p = strrchr(file, '.');
 
         if (p != NULL) {
+            if (_stricmp(p, ".gbc") == 0)
+                return true;
             if (_stricmp(p, ".gb") == 0)
                 return true;
             if (_stricmp(p, ".bin") == 0)
@@ -2205,16 +2553,16 @@ void gbCPUInit(const char* biosFileName, bool useBiosFile)
     if (!(gbHardware & 7))
         return;
 
-    useBios = false;
+    coreOptions.useBios = false;
     if (useBiosFile) {
-        int expectedSize = (gbHardware & 2) ? 0x900 : 0x100;
+        int expectedSize = (gbHardware & 2) ? kCGBBiosSize : kGBBiosSize;
         int size = expectedSize;
         if (utilLoad(biosFileName,
                 CPUIsGBBios,
                 bios,
                 size)) {
             if (size == expectedSize)
-                useBios = true;
+                coreOptions.useBios = true;
             else
                 systemMessage(MSG_INVALID_BIOS_FILE_SIZE, N_("Invalid BOOTROM file size"));
         }
@@ -2223,21 +2571,28 @@ void gbCPUInit(const char* biosFileName, bool useBiosFile)
 
 void gbGetHardwareType()
 {
-    gbCgbMode = 0;
-    gbSgbMode = 0;
-    if ((gbEmulatorType == 0 && (gbRom[0x143] & 0x80)) || gbEmulatorType == 1 || gbEmulatorType == 4) {
-        gbCgbMode = 1;
+    if (g_gbCartData.header_type() == gbCartData::RomHeaderType::kInvalid) {
+        gbHardware = 0;
+        return;
     }
 
-    if ((gbCgbMode == 0) && (gbRom[0x146] == 0x03)) {
+    gbCgbMode = false;
+    gbSgbMode = false;
+    if ((gbEmulatorType == 0 && g_gbCartData.SupportsCGB()) ||
+        gbEmulatorType == 1 || gbEmulatorType == 4) {
+        gbCgbMode = true;
+    }
+
+    if ((!gbCgbMode) && (g_gbCartData.sgb_support())) {
         if (gbEmulatorType == 0 || gbEmulatorType == 2 || gbEmulatorType == 5)
-            gbSgbMode = 1;
+            gbSgbMode = true;
     }
 
     gbHardware = 1; // GB
-    if (((gbCgbMode == 1) && (gbEmulatorType == 0)) || (gbEmulatorType == 1))
+    if ((gbCgbMode && (gbEmulatorType == 0)) || (gbEmulatorType == 1))
         gbHardware = 2; // GBC
-    else if (((gbSgbMode == 1) && (gbEmulatorType == 0)) || (gbEmulatorType == 2) || (gbEmulatorType == 5))
+    else if ((gbSgbMode && (gbEmulatorType == 0)) || (gbEmulatorType == 2) ||
+             (gbEmulatorType == 5))
         gbHardware = 4; // SGB(2)
     else if (gbEmulatorType == 4)
         gbHardware = 8; // GBA
@@ -2316,6 +2671,14 @@ static void gbSelectColorizationPalette()
     memcpy(gbPalette, gbColorizationPaletteData[palette][2], sizeof(gbColorizationPaletteData[palette][0]));
 }
 
+void gbResetPalette() {
+    if (!gbCgbMode && !gbSgbMode) {
+        // In SGB Mode, palette initialization is done in gbSgbReset().
+        memcpy(gbPalette, &systemGbPalette[gbPaletteOption * 8],
+            8 * sizeof(systemGbPalette[0]));
+    }
+}
+
 void gbReset()
 {
 #ifndef NO_LINK
@@ -2330,21 +2693,28 @@ void gbReset()
     oldRegister_WY = 146;
     gbInterruptLaunched = 0;
 
-    if (gbCgbMode == 1) {
-        if (gbVram == NULL)
-            gbVram = (uint8_t*)malloc(0x4000);
-        if (gbWram == NULL)
-            gbWram = (uint8_t*)malloc(0x8000);
-        memset(gbVram, 0, 0x4000);
-        memset(gbPalette, 0, 2 * 128);
-    } else {
-        if (gbVram != NULL) {
-            free(gbVram);
-            gbVram = NULL;
+    if (gbCgbMode) {
+        if (gbVram == nullptr) {
+            gbVram = (uint8_t*)calloc(1, kGBVRamSize);
+            if (gbVram == nullptr) {
+                return;
+            }
         }
-        if (gbWram != NULL) {
+        if (gbWram == nullptr) {
+            gbWram = (uint8_t*)malloc(kGBWRamSize);
+            if (gbWram == nullptr) {
+                return;
+            }
+        }
+        memset(gbPalette, 0, sizeof(gbPalette));
+    } else {
+        if (gbVram != nullptr) {
+            free(gbVram);
+            gbVram = nullptr;
+        }
+        if (gbWram != nullptr) {
             free(gbWram);
-            gbWram = NULL;
+            gbWram = nullptr;
         }
     }
 
@@ -2362,7 +2732,7 @@ void gbReset()
     // In all cases, most of the 2nd bank is filled with 00s.
     // The starting data are important for some 'buggy' games, like Buster Brothers or
     // Karamuchou ha Oosawagi!.
-    if (gbMemory != NULL) {
+    if (gbMemory != nullptr) {
         memset(gbMemory, 0xff, 65536);
         for (int temp = 0xC000; temp < 0xE000; temp++)
             if ((temp & 0x8) ^ ((temp & 0x800) >> 8)) {
@@ -2388,14 +2758,17 @@ void gbReset()
     }
 
     // clean LineBuffer
-    if (gbLineBuffer != NULL)
-        memset(gbLineBuffer, 0, sizeof(*gbLineBuffer));
+    if (gbLineBuffer != nullptr) {
+        memset(gbLineBuffer, 0, kGBLineBufferSize);
+    }
     // clean Pix
-    if (pix != NULL)
-        memset(pix, 0, sizeof(*pix));
+    if (pix != nullptr) {
+        memset(pix, 0, kGBPixSize);
+    }
     // clean Vram
-    if (gbVram != NULL)
-        memset(gbVram, 0, 0x4000);
+    if (gbVram != nullptr) {
+        memset(gbVram, 0, kGBVRamSize);
+    }
     // clean Wram 2
     // This kinda emulates the startup state of Wram on GBC (not very accurate,
     // but way closer to the reality than filling it with 00es or FFes).
@@ -2403,7 +2776,7 @@ void gbReset()
     // In all cases, most of the 2nd bank is filled with 00s.
     // The starting data are important for some 'buggy' games, like Buster Brothers or
     // Karamuchou ha Oosawagi!
-    if (gbWram != NULL) {
+    if (gbWram != nullptr) {
         for (int i = 0; i < 8; i++)
             if (i != 2)
                 memcpy((uint16_t*)(gbWram + i * 0x1000), (uint16_t*)(gbMemory + 0xC000), 0x1000);
@@ -2565,12 +2938,12 @@ void gbReset()
     }
 
     // used for the handling of the gb Boot Rom
-    if ((gbHardware & 7) && (bios != NULL) && useBios && !skipBios) {
+    if ((gbHardware & 7) && (bios != NULL) && coreOptions.useBios && !coreOptions.skipBios) {
         if (gbHardware & 5) {
             memcpy((uint8_t*)(gbMemory), (uint8_t*)(gbRom), 0x1000);
-            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), 0x100);
+            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), kGBBiosSize);
         } else {
-            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), 0x900);
+            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), kCGBBiosSize);
             memcpy((uint8_t*)(gbMemory + 0x100), (uint8_t*)(gbRom + 0x100), 0x100);
         }
         gbWhiteScreen = 0;
@@ -2592,7 +2965,8 @@ void gbReset()
         inBios = true;
     } else if (gbHardware & 0xa) {
         // Set compatibility mode if it is a DMG ROM.
-        gbMemory[0xff6c] = 0xfe | (uint8_t) !(gbRom[0x143] & 0x80);
+        const uint8_t gbcFlag = g_gbCartData.SupportsCGB() ? 0x80 : 0x00;
+        gbMemory[0xff6c] = 0xfe | gbcFlag;
     }
 
     gbLine99Ticks = 1;
@@ -2607,10 +2981,9 @@ void gbReset()
     gbTimerOnChange = false;
     gbTimerOn = 0;
 
-    if (gbCgbMode) {
-        for (i = 0; i < 0x20; i++)
-            gbPalette[i] = 0x7fff;
+    gbResetPalette();
 
+    if (gbCgbMode) {
         // This is just to show that the starting values of the OBJ palettes are different
         // between the 3 consoles, and that they 'kinda' stay the same at each reset
         // (they can slightly change, somehow (randomly?)).
@@ -2619,122 +2992,21 @@ void gbReset()
         // is running (GB,GBC and GBA(SP) have different startup values).
         // Unfortunatly, I don't have any SGB system, so I can't get their starting values.
 
-        if (gbGBCColorType == 0) // GBC Hardware
-        {
-            gbPalette[0x20] = 0x0600;
-            gbPalette[0x21] = 0xfdf3;
-            gbPalette[0x22] = 0x041c;
-            gbPalette[0x23] = 0xf5db;
-            gbPalette[0x24] = 0x4419;
-            gbPalette[0x25] = 0x57ea;
-            gbPalette[0x26] = 0x2808;
-            gbPalette[0x27] = 0x9b75;
-            gbPalette[0x28] = 0x129b;
-            gbPalette[0x29] = 0xfce0;
-            gbPalette[0x2a] = 0x22da;
-            gbPalette[0x2b] = 0x4ac5;
-            gbPalette[0x2c] = 0x2d71;
-            gbPalette[0x2d] = 0xf0c2;
-            gbPalette[0x2e] = 0x5137;
-            gbPalette[0x2f] = 0x2d41;
-            gbPalette[0x30] = 0x6b2d;
-            gbPalette[0x31] = 0x2215;
-            gbPalette[0x32] = 0xbe0a;
-            gbPalette[0x33] = 0xc053;
-            gbPalette[0x34] = 0xfe5f;
-            gbPalette[0x35] = 0xe000;
-            gbPalette[0x36] = 0xbe10;
-            gbPalette[0x37] = 0x914d;
-            gbPalette[0x38] = 0x7f91;
-            gbPalette[0x39] = 0x02b5;
-            gbPalette[0x3a] = 0x77ac;
-            gbPalette[0x3b] = 0x14e5;
-            gbPalette[0x3c] = 0xcf89;
-            gbPalette[0x3d] = 0xa03d;
-            gbPalette[0x3e] = 0xfd50;
-            gbPalette[0x3f] = 0x91ff;
-        } else if (gbGBCColorType == 1) // GBA Hardware
-        {
-            gbPalette[0x20] = 0xbe00;
-            gbPalette[0x21] = 0xfdfd;
-            gbPalette[0x22] = 0xbd69;
-            gbPalette[0x23] = 0x7baf;
-            gbPalette[0x24] = 0xf5ff;
-            gbPalette[0x25] = 0x3f8f;
-            gbPalette[0x26] = 0xcee5;
-            gbPalette[0x27] = 0x5bf7;
-            gbPalette[0x28] = 0xb35b;
-            gbPalette[0x29] = 0xef97;
-            gbPalette[0x2a] = 0xef9f;
-            gbPalette[0x2b] = 0x97f7;
-            gbPalette[0x2c] = 0x82bf;
-            gbPalette[0x2d] = 0x9f3d;
-            gbPalette[0x2e] = 0xddde;
-            gbPalette[0x2f] = 0xbad5;
-            gbPalette[0x30] = 0x3cba;
-            gbPalette[0x31] = 0xdfd7;
-            gbPalette[0x32] = 0xedea;
-            gbPalette[0x33] = 0xfeda;
-            gbPalette[0x34] = 0xf7f9;
-            gbPalette[0x35] = 0xfdee;
-            gbPalette[0x36] = 0x6d2f;
-            gbPalette[0x37] = 0xf0e6;
-            gbPalette[0x38] = 0xf7f0;
-            gbPalette[0x39] = 0xf296;
-            gbPalette[0x3a] = 0x3bf1;
-            gbPalette[0x3b] = 0xe211;
-            gbPalette[0x3c] = 0x69ba;
-            gbPalette[0x3d] = 0x3d0d;
-            gbPalette[0x3e] = 0xdfd3;
-            gbPalette[0x3f] = 0xa6ba;
-        } else if (gbGBCColorType == 2) // GBASP Hardware
-        {
-            gbPalette[0x20] = 0x9c00;
-            gbPalette[0x21] = 0x6340;
-            gbPalette[0x22] = 0x10c6;
-            gbPalette[0x23] = 0xdb97;
-            gbPalette[0x24] = 0x7622;
-            gbPalette[0x25] = 0x3e57;
-            gbPalette[0x26] = 0x2e12;
-            gbPalette[0x27] = 0x95c3;
-            gbPalette[0x28] = 0x1095;
-            gbPalette[0x29] = 0x488c;
-            gbPalette[0x2a] = 0x8241;
-            gbPalette[0x2b] = 0xde8c;
-            gbPalette[0x2c] = 0xfabc;
-            gbPalette[0x2d] = 0x0e81;
-            gbPalette[0x2e] = 0x7675;
-            gbPalette[0x2f] = 0xfdec;
-            gbPalette[0x30] = 0xddfd;
-            gbPalette[0x31] = 0x5995;
-            gbPalette[0x32] = 0x066a;
-            gbPalette[0x33] = 0xed1e;
-            gbPalette[0x34] = 0x1e84;
-            gbPalette[0x35] = 0x1d14;
-            gbPalette[0x36] = 0x11c3;
-            gbPalette[0x37] = 0x2749;
-            gbPalette[0x38] = 0xa727;
-            gbPalette[0x39] = 0x6266;
-            gbPalette[0x3a] = 0xe27b;
-            gbPalette[0x3b] = 0xe3fc;
-            gbPalette[0x3c] = 0x1f76;
-            gbPalette[0x3d] = 0xf158;
-            gbPalette[0x3e] = 0x468e;
-            gbPalette[0x3f] = 0xa540;
+        if (gbGBCColorType == 0) {
+            // GBC Hardware
+            std::copy(kGbGbcPalette.begin(), kGbGbcPalette.end(), gbPalette);
+        } else if (gbGBCColorType == 1) {
+            // GBA Hardware
+            std::copy(kGbGbaPalette.begin(), kGbGbaPalette.end(), gbPalette);
+        } else if (gbGBCColorType == 2) {
+            // GBASP Hardware
+            std::copy(kGbGbaSpPalette.begin(), kGbGbaSpPalette.end(), gbPalette);
         }
 
         // The CGB BIOS palette selection has to be done by VBA if BIOS is skipped.
-        if (!(gbRom[0x143] & 0x80) && !inBios) {
+        if (!g_gbCartData.RequiresCGB() && !inBios) {
             gbSelectColorizationPalette();
         }
-
-    } else {
-        if (gbSgbMode) {
-            for (i = 0; i < 8; i++)
-                gbPalette[i] = systemGbPalette[gbPaletteOption * 8 + i];
-        }
-        for (i = 0; i < 8; i++)
-            gbPalette[i] = systemGbPalette[gbPaletteOption * 8 + i];
     }
 
     GBTIMER_MODE_0_CLOCK_TICKS = 256;
@@ -2786,10 +3058,13 @@ void gbReset()
 
     memset(&gbDataMBC5, 0, sizeof(gbDataMBC5));
     gbDataMBC5.mapperROMBank = 1;
-    gbDataMBC5.isRumbleCartridge = gbRumble;
+    gbDataMBC5.isRumbleCartridge = g_gbCartData.has_rumble();
 
     memset(&gbDataHuC1, 0, sizeof(gbDataHuC1));
     gbDataHuC1.mapperROMBank = 1;
+
+    memset(&gbDataMBC7, 0, sizeof(gbDataMBC7));
+    gbDataMBC7.mapperROMBank = 1;
 
     memset(&gbDataHuC3, 0, sizeof(gbDataHuC3));
     gbDataHuC3.mapperROMBank = 1;
@@ -2861,637 +3136,6 @@ void gbReset()
     gbCheatWrite(true); // Emulates GS codes.
 }
 
-#ifndef __LIBRETRO__
-void gbWriteSaveMBC1(const char* name)
-{
-    if (gbRam) {
-        FILE* gzFile = utilOpenFile(name, "wb");
-
-        if (gzFile == NULL) {
-            systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
-            return;
-        }
-
-        fwrite(gbRam,
-            1,
-            (gbRamSizeMask + 1),
-            gzFile);
-
-        fclose(gzFile);
-    }
-}
-
-void gbWriteSaveMBC2(const char* name)
-{
-    if (gbRam) {
-        FILE* file = utilOpenFile(name, "wb");
-
-        if (file == NULL) {
-            systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
-            return;
-        }
-
-        fwrite(gbMemoryMap[0x0a],
-            1,
-            512,
-            file);
-
-        fclose(file);
-    }
-}
-
-void gbWriteSaveMBC3(const char* name, bool extendedSave)
-{
-    if (gbRam || extendedSave) {
-        FILE* gzFile = utilOpenFile(name, "wb");
-        if (gbRam) {
-
-            if (gzFile == NULL) {
-                systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
-                return;
-            }
-
-            fwrite(gbRam,
-                1,
-                (gbRamSizeMask + 1),
-                gzFile);
-        }
-
-        if (extendedSave)
-            fwrite(&gbDataMBC3.mapperSeconds,
-                1,
-                MBC3_RTC_DATA_SIZE,
-                gzFile);
-
-        fclose(gzFile);
-    }
-}
-
-void gbWriteSaveMBC5(const char* name)
-{
-    if (gbRam) {
-        FILE* gzFile = utilOpenFile(name, "wb");
-
-        if (gzFile == NULL) {
-            systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
-            return;
-        }
-
-        fwrite(gbRam,
-            1,
-            (gbRamSizeMask + 1),
-            gzFile);
-
-        fclose(gzFile);
-    }
-}
-
-void gbWriteSaveMBC7(const char* name)
-{
-    if (gbRam) {
-        FILE* file = utilOpenFile(name, "wb");
-
-        if (file == NULL) {
-            systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
-            return;
-        }
-
-        fwrite(&gbMemory[0xa000],
-            1,
-            256,
-            file);
-
-        fclose(file);
-    }
-}
-
-void gbWriteSaveTAMA5(const char* name, bool extendedSave)
-{
-    FILE* gzFile = utilOpenFile(name, "wb");
-
-    if (gzFile == NULL) {
-        systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
-        return;
-    }
-    if (gbRam)
-        fwrite(gbRam,
-            1,
-            (gbRamSizeMask + 1),
-            gzFile);
-
-    fwrite(gbTAMA5ram,
-        1,
-        (gbTAMA5ramSize),
-        gzFile);
-
-    if (extendedSave)
-        fwrite(&gbDataTAMA5.mapperSeconds,
-            1,
-            TAMA5_RTC_DATA_SIZE,
-            gzFile);
-
-    fclose(gzFile);
-}
-
-void gbWriteSaveMMM01(const char* name)
-{
-    if (gbRam) {
-        FILE* gzFile = utilOpenFile(name, "wb");
-
-        if (gzFile == NULL) {
-            systemMessage(MSG_ERROR_CREATING_FILE, N_("Error creating file %s"), name);
-            return;
-        }
-
-        fwrite(gbRam,
-            1,
-            (gbRamSizeMask + 1),
-            gzFile);
-
-        fclose(gzFile);
-    }
-}
-
-bool gbReadSaveMBC1(const char* name)
-{
-    if (gbRam) {
-        gzFile gzFile = utilAutoGzOpen(name, "rb");
-
-        if (gzFile == NULL) {
-            return false;
-        }
-
-        int read = gzread(gzFile,
-            gbRam,
-            (gbRamSizeMask + 1));
-
-        if (read != (gbRamSizeMask + 1)) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            gzclose(gzFile);
-            gbBatteryError = true;
-            return false;
-        }
-
-        // Also checks if the battery file it bigger than gbRamSizeMask+1 !
-        uint8_t data[1];
-        data[0] = 0;
-
-        read = gzread(gzFile,
-            data,
-            1);
-        if (read > 0) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            gzclose(gzFile);
-            gbBatteryError = true;
-            return false;
-        }
-
-        gzclose(gzFile);
-        return true;
-    } else
-        return false;
-}
-
-bool gbReadSaveMBC2(const char* name)
-{
-    if (gbRam) {
-        FILE* file = utilOpenFile(name, "rb");
-
-        if (file == NULL) {
-            return false;
-        }
-
-        size_t read = fread(gbMemoryMap[0x0a],
-            1,
-            512,
-            file);
-
-        if (read != 512) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            fclose(file);
-            gbBatteryError = true;
-            return false;
-        }
-
-        // Also checks if the battery file it bigger than gbRamSizeMask+1 !
-        uint8_t data[1];
-        data[0] = 0;
-
-        read = fread(&data[0],
-            1,
-            1,
-            file);
-        if (read > 0) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            fclose(file);
-            gbBatteryError = true;
-            return false;
-        }
-
-        fclose(file);
-        return true;
-    } else
-        return false;
-}
-
-bool gbReadSaveMBC3(const char* name)
-{
-    gzFile gzFile = utilAutoGzOpen(name, "rb");
-
-    if (gzFile == NULL) {
-        return false;
-    }
-
-    int read = 0;
-
-    if (gbRam)
-        read = gzread(gzFile,
-            gbRam,
-            (gbRamSizeMask + 1));
-    else
-        read = (gbRamSizeMask + 1);
-
-    bool res = true;
-
-    if (read != (gbRamSizeMask + 1)) {
-        systemMessage(MSG_FAILED_TO_READ_SGM,
-            N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-        gbBatteryError = true;
-        res = false;
-    } else if ((gbRomType == 0xf) || (gbRomType == 0x10)) { // read RTC data
-        read = gzread(gzFile,
-            &gbDataMBC3.mapperSeconds,
-            MBC3_RTC_DATA_SIZE);
-
-        if (!read || (read != MBC3_RTC_DATA_SIZE && read != MBC3_RTC_DATA_SIZE - 4)) { // detect old 32 bit saves
-            systemMessage(MSG_FAILED_TO_READ_RTC, N_("Failed to read RTC from save game %s (continuing)"),
-                name);
-            res = false;
-        }
-        else {
-            // Also checks if the battery file it bigger than gbRamSizeMask+1+RTC !
-            uint8_t data[1];
-            data[0] = 0;
-
-            read = gzread(gzFile,
-                data,
-                1);
-            if (read > 0) {
-                systemMessage(MSG_FAILED_TO_READ_SGM,
-                    N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-                gbBatteryError = true;
-                res = false;
-            }
-        }
-    }
-
-    gzclose(gzFile);
-    return res;
-}
-
-bool gbReadSaveMBC5(const char* name)
-{
-    if (gbRam) {
-        gzFile gzFile = utilAutoGzOpen(name, "rb");
-
-        if (gzFile == NULL) {
-            return false;
-        }
-
-        int read = gzread(gzFile,
-            gbRam,
-            (gbRamSizeMask + 1));
-
-        if (read != (gbRamSizeMask + 1)) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            gzclose(gzFile);
-            gbBatteryError = true;
-            return false;
-        }
-
-        // Also checks if the battery file it bigger than gbRamSizeMask+1 !
-        uint8_t data[1];
-        data[0] = 0;
-
-        read = gzread(gzFile,
-            data,
-            1);
-        if (read > 0) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            gzclose(gzFile);
-            gbBatteryError = true;
-            return false;
-        }
-
-        gzclose(gzFile);
-        return true;
-    } else
-        return false;
-}
-
-bool gbReadSaveMBC7(const char* name)
-{
-    if (gbRam) {
-        FILE* file = utilOpenFile(name, "rb");
-
-        if (file == NULL) {
-            return false;
-        }
-
-        size_t read = fread(&gbMemory[0xa000],
-            1,
-            256,
-            file);
-
-        if (read != 256) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            fclose(file);
-            gbBatteryError = true;
-            return false;
-        }
-
-        // Also checks if the battery file it bigger than gbRamSizeMask+1 !
-        uint8_t data[1];
-        data[0] = 0;
-
-        read = fread(&data[0],
-            1,
-            1,
-            file);
-        if (read > 0) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            fclose(file);
-            gbBatteryError = true;
-            return false;
-        }
-
-        fclose(file);
-        return true;
-    } else
-        return false;
-}
-
-bool gbReadSaveTAMA5(const char* name)
-{
-    gzFile gzFile = utilAutoGzOpen(name, "rb");
-
-    if (gzFile == NULL) {
-        return false;
-    }
-
-    int read = 0;
-
-    if (gbRam)
-        read = gzread(gzFile,
-            gbRam,
-            (gbRamSizeMask + 1));
-    else
-        read = gbRamSizeMask;
-
-    read += gzread(gzFile,
-        gbTAMA5ram,
-        gbTAMA5ramSize);
-
-    bool res = true;
-
-    if (read != (gbRamSizeMask + gbTAMA5ramSize + 1)) {
-        systemMessage(MSG_FAILED_TO_READ_SGM,
-            N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-        gbBatteryError = true;
-        res = false;
-    } else {
-        read = gzread(gzFile,
-            &gbDataTAMA5.mapperSeconds,
-            TAMA5_RTC_DATA_SIZE);
-
-        if (!read || (read != TAMA5_RTC_DATA_SIZE && read != TAMA5_RTC_DATA_SIZE - 4)) { // detect old 32 bit saves
-            systemMessage(MSG_FAILED_TO_READ_RTC, N_("Failed to read RTC from save game %s (continuing)"),
-                name);
-            res = false;
-        } else {
-            // Also checks if the battery file it bigger than gbRamSizeMask+1+RTC !
-            uint8_t data[1];
-            data[0] = 0;
-
-            read = gzread(gzFile,
-                data,
-                1);
-            if (read > 0) {
-                systemMessage(MSG_FAILED_TO_READ_SGM,
-                    N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-                gbBatteryError = true;
-                res = false;
-            }
-        }
-    }
-
-    gzclose(gzFile);
-    return res;
-}
-
-bool gbReadSaveMMM01(const char* name)
-{
-    if (gbRam) {
-        gzFile gzFile = utilAutoGzOpen(name, "rb");
-
-        if (gzFile == NULL) {
-            return false;
-        }
-
-        int read = gzread(gzFile,
-            gbRam,
-            (gbRamSizeMask + 1));
-
-        if (read != (gbRamSizeMask + 1)) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            gzclose(gzFile);
-            gbBatteryError = true;
-            return false;
-        }
-
-        // Also checks if the battery file it bigger than gbRamSizeMask+1 !
-        uint8_t data[1];
-        data[0] = 0;
-
-        read = gzread(gzFile,
-            data,
-            1);
-        if (read > 0) {
-            systemMessage(MSG_FAILED_TO_READ_SGM,
-                N_("Battery file's size incompatible with the rom settings %s (%d).\nWarning : save of the battery file is now disabled !"), name, read);
-            gzclose(gzFile);
-            gbBatteryError = true;
-            return false;
-        }
-
-        gzclose(gzFile);
-        return true;
-    } else
-        return false;
-}
-#endif // !__LIBRETRO__
-
-void gbInit()
-{
-    gbGenFilter();
-    gbSgbInit();
-    setColorizerHack(false);
-
-    gbMemory = (uint8_t*)malloc(65536);
-
-#ifdef __LIBRETRO__
-    pix = (uint8_t*)calloc(1, 4 * 256 * 224);
-#else
-    pix = (uint8_t*)calloc(1, 4 * 257 * 226);
-#endif
-
-    gbLineBuffer = (uint16_t*)malloc(160 * sizeof(uint16_t));
-}
-
-#ifndef __LIBRETRO__
-bool gbWriteBatteryFile(const char* file, bool extendedSave)
-{
-    if (gbBattery) {
-        switch (gbRomType) {
-        case 0x03:
-            gbWriteSaveMBC1(file);
-            break;
-        case 0x06:
-            gbWriteSaveMBC2(file);
-            break;
-        case 0x0d:
-            gbWriteSaveMMM01(file);
-            break;
-        case 0x0f:
-        case 0x10:
-            gbWriteSaveMBC3(file, extendedSave);
-            break;
-        case 0x13:
-        case 0xfc:
-            gbWriteSaveMBC3(file, false);
-            break;
-        case 0x1b:
-        case 0x1e:
-            gbWriteSaveMBC5(file);
-            break;
-        case 0x22:
-            gbWriteSaveMBC7(file);
-            break;
-        case 0xfd:
-            gbWriteSaveTAMA5(file, extendedSave);
-            break;
-        case 0xff:
-            gbWriteSaveMBC1(file);
-            break;
-        }
-    }
-    return true;
-}
-
-bool gbWriteBatteryFile(const char* file)
-{
-    if (!gbBatteryError) {
-        gbWriteBatteryFile(file, true);
-        return true;
-    } else
-        return false;
-}
-
-bool gbReadBatteryFile(const char* file)
-{
-    bool res = false;
-    if (gbBattery) {
-        switch (gbRomType) {
-        case 0x03:
-            res = gbReadSaveMBC1(file);
-            break;
-        case 0x06:
-            res = gbReadSaveMBC2(file);
-            break;
-        case 0x0d:
-            res = gbReadSaveMMM01(file);
-            break;
-        case 0x0f:
-        case 0x10:
-            if (!gbReadSaveMBC3(file)) {
-                time(&gbDataMBC3.mapperLastTime);
-                struct tm* lt;
-                lt = localtime(&gbDataMBC3.mapperLastTime);
-                gbDataMBC3.mapperSeconds = lt->tm_sec;
-                gbDataMBC3.mapperMinutes = lt->tm_min;
-                gbDataMBC3.mapperHours = lt->tm_hour;
-                gbDataMBC3.mapperDays = lt->tm_yday & 255;
-                gbDataMBC3.mapperControl = (gbDataMBC3.mapperControl & 0xfe) | (lt->tm_yday > 255 ? 1 : 0);
-                res = false;
-                break;
-            }
-            res = true;
-            break;
-        case 0x13:
-        case 0xfc:
-            res = gbReadSaveMBC3(file);
-            break;
-        case 0x1b:
-        case 0x1e:
-            res = gbReadSaveMBC5(file);
-            break;
-        case 0x22:
-            res = gbReadSaveMBC7(file);
-            break;
-        case 0xfd:
-            if (!gbReadSaveTAMA5(file)) {
-                uint8_t gbDaysinMonth[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-                time(&gbDataTAMA5.mapperLastTime);
-                struct tm* lt;
-                lt = localtime(&gbDataTAMA5.mapperLastTime);
-                gbDataTAMA5.mapperSeconds = lt->tm_sec;
-                gbDataTAMA5.mapperMinutes = lt->tm_min;
-                gbDataTAMA5.mapperHours = lt->tm_hour;
-                gbDataTAMA5.mapperDays = 1;
-                gbDataTAMA5.mapperMonths = 1;
-                gbDataTAMA5.mapperYears = 1970;
-                int days = lt->tm_yday + 365 * 3;
-                while (days) {
-                    gbDataTAMA5.mapperDays++;
-                    days--;
-                    if (gbDataTAMA5.mapperDays > gbDaysinMonth[gbDataTAMA5.mapperMonths - 1]) {
-                        gbDataTAMA5.mapperDays = 1;
-                        gbDataTAMA5.mapperMonths++;
-                        if (gbDataTAMA5.mapperMonths > 12) {
-                            gbDataTAMA5.mapperMonths = 1;
-                            gbDataTAMA5.mapperYears++;
-                            if ((gbDataTAMA5.mapperYears & 3) == 0)
-                                gbDaysinMonth[1] = 29;
-                            else
-                                gbDaysinMonth[1] = 28;
-                        }
-                    }
-                }
-                gbDataTAMA5.mapperControl = (gbDataTAMA5.mapperControl & 0xfe) | (lt->tm_yday > 255 ? 1 : 0);
-                res = false;
-                break;
-            }
-            res = true;
-            break;
-        case 0xff:
-            res = gbReadSaveMBC1(file);
-            break;
-        }
-    }
-    systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
-    return res;
-}
-#endif // !__LIBRETRO__
-
 bool gbReadGSASnapshot(const char* fileName)
 {
     FILE* file = utilOpenFile(fileName, "rb");
@@ -3517,26 +3161,24 @@ bool gbReadGSASnapshot(const char* fileName)
         return false;
     }
     fseek(file, 0x13, SEEK_SET);
-    switch (gbRomType) {
-    case 0x03:
-    case 0x0f:
-    case 0x10:
-    case 0x13:
-    case 0x1b:
-    case 0x1e:
-    case 0xff:
-        FREAD_UNCHECKED(gbRam, 1, (gbRamSizeMask + 1), file);
-        break;
-    case 0x06:
-    case 0x22:
-        FREAD_UNCHECKED(&gbMemory[0xa000], 1, 256, file);
-        break;
-    default:
-        systemMessage(MSG_UNSUPPORTED_SNAPSHOT_FILE,
-            N_("Unsupported snapshot file %s"),
-            fileName);
-        fclose(file);
-        return false;
+    if (g_gbCartData.has_battery()) {
+        switch (g_gbCartData.mapper_type()) {
+            case gbCartData::MapperType::kMbc1:
+            case gbCartData::MapperType::kMbc3:
+            case gbCartData::MapperType::kMbc5:
+            case gbCartData::MapperType::kMbc7:
+            case gbCartData::MapperType::kHuC1:
+                FREAD_UNCHECKED(gbRam, 1, g_gbCartData.ram_size(), file);
+                break;
+            case gbCartData::MapperType::kMbc2:
+                FREAD_UNCHECKED(&gbMemory[0xa000], 1, k256B, file);
+                break;
+            default:
+                systemMessage(MSG_UNSUPPORTED_SNAPSHOT_FILE,
+                              N_("Unsupported snapshot file %s"), fileName);
+                fclose(file);
+                return false;
+        }
     }
     fclose(file);
     gbReset();
@@ -3632,7 +3274,7 @@ static bool gbWriteSaveState(gzFile gzFile)
 
     utilGzWrite(gzFile, &gbRom[0x134], 15);
 
-    utilWriteInt(gzFile, useBios);
+    utilWriteInt(gzFile, coreOptions.useBios);
     utilWriteInt(gzFile, inBios);
 
     utilWriteData(gzFile, gbSaveGameStruct);
@@ -3651,21 +3293,22 @@ static bool gbWriteSaveState(gzFile gzFile)
     utilGzWrite(gzFile, &gbDataHuC3, sizeof(gbDataHuC3));
     utilGzWrite(gzFile, &gbDataTAMA5, sizeof(gbDataTAMA5));
     if (gbTAMA5ram != NULL)
-        utilGzWrite(gzFile, gbTAMA5ram, gbTAMA5ramSize);
+        utilGzWrite(gzFile, gbTAMA5ram, kTama5RamSize);
     utilGzWrite(gzFile, &gbDataMMM01, sizeof(gbDataMMM01));
 
-    utilGzWrite(gzFile, gbPalette, 128 * sizeof(uint16_t));
+    utilGzWrite(gzFile, gbPalette, sizeof(gbPalette));
 
     utilGzWrite(gzFile, &gbMemory[0x8000], 0x8000);
 
-    if (gbRamSize && gbRam) {
-        utilWriteInt(gzFile, gbRamSize);
-        utilGzWrite(gzFile, gbRam, gbRamSize);
+    if (g_gbCartData.HasRam()) {
+        const size_t ramSize = g_gbCartData.ram_size();
+        utilWriteInt(gzFile, ramSize);
+        utilGzWrite(gzFile, gbRam, ramSize);
     }
 
     if (gbCgbMode) {
-        utilGzWrite(gzFile, gbVram, 0x4000);
-        utilGzWrite(gzFile, gbWram, 0x8000);
+        utilGzWrite(gzFile, gbVram, kGBVRamSize);
+        utilGzWrite(gzFile, gbWram, kGBWRamSize);
     }
 
     gbSoundSaveGame(gzFile);
@@ -3749,8 +3392,8 @@ static bool gbReadSaveState(gzFile gzFile)
         ub = utilReadInt(gzFile) ? true : false;
         ib = utilReadInt(gzFile) ? true : false;
 
-        if ((ub != useBios) && (ib)) {
-            if (useBios)
+        if ((ub != coreOptions.useBios) && (ib)) {
+            if (coreOptions.useBios)
                 systemMessage(MSG_SAVE_GAME_NOT_USING_BIOS,
                     N_("Save game is not using the BIOS files"));
             else
@@ -3767,22 +3410,29 @@ static bool gbReadSaveState(gzFile gzFile)
     utilReadData(gzFile, gbSaveGameStruct);
 
     // Correct crash when loading color gameboy save in regular gameboy type.
-    if (!gbCgbMode) {
-        if (gbVram != NULL) {
-            free(gbVram);
-            gbVram = NULL;
+    if (gbCgbMode) {
+        if (gbVram == nullptr) {
+            gbVram = (uint8_t*)calloc(1, kGBVRamSize);
+            if (gbVram == nullptr) {
+                return false;
+            }
         }
-        if (gbWram != NULL) {
-            free(gbWram);
-            gbWram = NULL;
+        if (gbWram == nullptr) {
+            gbWram = (uint8_t*)malloc(kGBWRamSize);
+            if (gbWram == nullptr) {
+                return false;
+            }
         }
+        memset(gbPalette, 0, sizeof(gbPalette));
     } else {
-        if (gbVram == NULL)
-            gbVram = (uint8_t*)malloc(0x4000);
-        if (gbWram == NULL)
-            gbWram = (uint8_t*)malloc(0x8000);
-        memset(gbVram, 0, 0x4000);
-        memset(gbPalette, 0, 2 * 128);
+        if (gbVram != nullptr) {
+            free(gbVram);
+            gbVram = nullptr;
+        }
+        if (gbWram != nullptr) {
+            free(gbWram);
+            gbWram = nullptr;
+        }
     }
 
     if (version >= GBSAVE_GAME_VERSION_7) {
@@ -3806,10 +3456,10 @@ static bool gbReadSaveState(gzFile gzFile)
     if (version >= 11) {
         utilGzRead(gzFile, &gbDataTAMA5, sizeof(gbDataTAMA5));
         if (gbTAMA5ram != NULL) {
-            if (skipSaveGameBattery) {
-                utilGzSeek(gzFile, gbTAMA5ramSize, SEEK_CUR);
+            if (coreOptions.skipSaveGameBattery) {
+                utilGzSeek(gzFile, kTama5RamSize, SEEK_CUR);
             } else {
-                utilGzRead(gzFile, gbTAMA5ram, gbTAMA5ramSize);
+                utilGzRead(gzFile, gbTAMA5ram, kTama5RamSize);
             }
         }
         utilGzRead(gzFile, &gbDataMMM01, sizeof(gbDataMMM01));
@@ -3818,7 +3468,7 @@ static bool gbReadSaveState(gzFile gzFile)
     if (version < GBSAVE_GAME_VERSION_5) {
         utilGzRead(gzFile, pix, 256 * 224 * sizeof(uint16_t));
     }
-    memset(pix, 0, 257 * 226 * sizeof(uint32_t));
+    memset(pix, 0, kGBPixSize);
 
     if (version < GBSAVE_GAME_VERSION_6) {
         utilGzRead(gzFile, gbPalette, 64 * sizeof(uint16_t));
@@ -3828,31 +3478,32 @@ static bool gbReadSaveState(gzFile gzFile)
     if (version < 11)
         utilGzRead(gzFile, gbPalette, 128 * sizeof(uint16_t));
 
-    if (version < GBSAVE_GAME_VERSION_10) {
-        if (!gbCgbMode && !gbSgbMode) {
-            for (int i = 0; i < 8; i++)
-                gbPalette[i] = systemGbPalette[gbPaletteOption * 8 + i];
-        }
-    }
+    // This is necessary for GB games (not GBC or SGB) to have them load with
+    // the user-defined palette and not the saved palette.
+    gbResetPalette();
 
     utilGzRead(gzFile, &gbMemory[0x8000], 0x8000);
 
-    if (gbRamSize && gbRam) {
+    if (g_gbCartData.HasRam()) {
+        const size_t ram_size = g_gbCartData.ram_size();
         if (version < 11)
-            if (skipSaveGameBattery) {
-                utilGzSeek(gzFile, gbRamSize, SEEK_CUR); //skip
+            if (coreOptions.skipSaveGameBattery) {
+                utilGzSeek(gzFile, ram_size, SEEK_CUR); //skip
             } else {
-                utilGzRead(gzFile, gbRam, gbRamSize); //read
+                utilGzRead(gzFile, gbRam, ram_size); //read
             }
         else {
-            int ramSize = utilReadInt(gzFile);
-            if (skipSaveGameBattery) {
-                utilGzSeek(gzFile, (gbRamSize > ramSize) ? ramSize : gbRamSize, SEEK_CUR); //skip
+            const size_t stateRamSize = utilReadInt(gzFile);
+            if (coreOptions.skipSaveGameBattery) {
+                // Skip over the save game RAM.
+                utilGzSeek(gzFile, std::min(ram_size, stateRamSize), SEEK_CUR);
             } else {
-                utilGzRead(gzFile, gbRam, (gbRamSize > ramSize) ? ramSize : gbRamSize); //read
+                // Ovewrite the save game RAM.
+                utilGzRead(gzFile, gbRam, std::min(ram_size, stateRamSize));
             }
-            if (ramSize > gbRamSize)
-                utilGzSeek(gzFile, ramSize - gbRamSize, SEEK_CUR);
+            if (stateRamSize > ram_size) {
+                utilGzSeek(gzFile, stateRamSize - ram_size, SEEK_CUR);
+            }
         }
     }
 
@@ -3867,9 +3518,9 @@ static bool gbReadSaveState(gzFile gzFile)
         gbMemoryMap[0x00] = &gbMemory[0x0000];
         if (gbHardware & 5) {
             memcpy((uint8_t*)(gbMemory), (uint8_t*)(gbRom), 0x1000);
-            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), 0x100);
+            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), kGBBiosSize);
         } else if (gbHardware & 2) {
-            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), 0x900);
+            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), kCGBBiosSize);
             memcpy((uint8_t*)(gbMemory + 0x100), (uint8_t*)(gbRom + 0x100), 0x100);
         }
 
@@ -3891,70 +3542,49 @@ static bool gbReadSaveState(gzFile gzFile)
     gbMemoryMap[0x0e] = &gbMemory[0xe000];
     gbMemoryMap[0x0f] = &gbMemory[0xf000];
 
-    switch (gbRomType) {
-    case 0x00:
-    case 0x01:
-    case 0x02:
-    case 0x03:
-        // MBC 1
-        memoryUpdateMapMBC1();
-        break;
-    case 0x05:
-    case 0x06:
-        // MBC2
-        memoryUpdateMapMBC2();
-        break;
-    case 0x0b:
-    case 0x0c:
-    case 0x0d:
-        // MMM01
-        memoryUpdateMapMMM01();
-        break;
-    case 0x0f:
-    case 0x10:
-    case 0x11:
-    case 0x12:
-    case 0x13:
-        // MBC 3
-        memoryUpdateMapMBC3();
-        break;
-    case 0x19:
-    case 0x1a:
-    case 0x1b:
-        // MBC5
-        memoryUpdateMapMBC5();
-        break;
-    case 0x1c:
-    case 0x1d:
-    case 0x1e:
-        // MBC 5 Rumble
-        memoryUpdateMapMBC5();
-        break;
-    case 0x22:
-        // MBC 7
-        memoryUpdateMapMBC7();
-        break;
-    case 0x56:
-        // GS3
-        memoryUpdateMapGS3();
-        break;
-    case 0xfd:
-        // TAMA5
-        memoryUpdateMapTAMA5();
-        break;
-    case 0xfe:
-        // HuC3
-        memoryUpdateMapHuC3();
-        break;
-    case 0xff:
-        // HuC1
-        memoryUpdateMapHuC1();
-        break;
+    switch (g_gbCartData.mapper_type()) {
+        case gbCartData::MapperType::kNone:
+        case gbCartData::MapperType::kMbc1:
+            memoryUpdateMapMBC1();
+            break;
+        case gbCartData::MapperType::kMbc2:
+            memoryUpdateMapMBC2();
+            break;
+        case gbCartData::MapperType::kMmm01:
+            memoryUpdateMapMMM01();
+            break;
+        case gbCartData::MapperType::kMbc3:
+            memoryUpdateMapMBC3();
+            break;
+        case gbCartData::MapperType::kMbc5:
+            memoryUpdateMapMBC5();
+            break;
+        case gbCartData::MapperType::kMbc7:
+            memoryUpdateMapMBC7();
+            break;
+        case gbCartData::MapperType::kGameShark:
+            memoryUpdateMapGS3();
+            break;
+        case gbCartData::MapperType::kTama5:
+            memoryUpdateMapTAMA5();
+            break;
+        case gbCartData::MapperType::kHuC3:
+            memoryUpdateMapHuC3();
+            break;
+        case gbCartData::MapperType::kHuC1:
+            memoryUpdateMapHuC1();
+            break;
+        case gbCartData::MapperType::kMbc6:
+        case gbCartData::MapperType::kPocketCamera:
+        case gbCartData::MapperType::kGameGenie:
+        case gbCartData::MapperType::kUnknown:
+            // Do nothing.
+            break;
     }
 
     if (gbCgbMode) {
-        utilGzRead(gzFile, gbVram, 0x4000);
-        utilGzRead(gzFile, gbWram, 0x8000);
+        utilGzRead(gzFile, gbVram, kGBVRamSize);
+        utilGzRead(gzFile, gbWram, kGBWRamSize);
 
         int value = register_SVBK;
         if (value == 0)
@@ -3968,7 +3598,7 @@ static bool gbReadSaveState(gzFile gzFile)
     gbSoundReadGame(version, gzFile);
 
     if (gbCgbMode && gbSgbMode) {
-        gbSgbMode = 0;
+        gbSgbMode = false;
     }
 
     if (gbBorderOn && !gbSgbMask) {
@@ -3978,7 +3608,7 @@ static bool gbReadSaveState(gzFile gzFile)
     systemDrawScreen();
 
     if (version > GBSAVE_GAME_VERSION_1) {
-        if (skipSaveGameCheats) {
+        if (coreOptions.skipSaveGameCheats) {
             gbCheatsReadGameSkip(gzFile, version);
         } else {
             gbCheatsReadGame(gzFile, version);
@@ -4062,8 +3692,10 @@ static bool gbReadSaveState(gzFile gzFile)
 
     systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
 
-    if (version >= 12 && utilReadInt(gzFile) != 0x12345678)
-        assert(false); // fails if something read too much/little from file
+    if (version >= 12 && utilReadInt(gzFile) != 0x12345678) {
+        // fails if something read too much/little from file
+        return false;
+    }
 
     return true;
 }
@@ -4093,358 +3725,123 @@ bool gbReadSaveState(const char* name)
 
     return res;
 }
-#endif // !__LIBRETRO__
 
 bool gbWritePNGFile(const char* fileName)
 {
     if (gbBorderOn)
-        return utilWritePNGFile(fileName, 256, 224, pix);
-    return utilWritePNGFile(fileName, 160, 144, pix);
+        return utilWritePNGFile(fileName, kSGBWidth, kSGBHeight, pix);
+    return utilWritePNGFile(fileName, kGBWidth, kGBHeight, pix);
 }
 
 bool gbWriteBMPFile(const char* fileName)
 {
     if (gbBorderOn)
-        return utilWriteBMPFile(fileName, 256, 224, pix);
-    return utilWriteBMPFile(fileName, 160, 144, pix);
+        return utilWriteBMPFile(fileName, kSGBWidth, kSGBHeight, pix);
+    return utilWriteBMPFile(fileName, kGBWidth, kGBHeight, pix);
 }
+#endif // !__LIBRETRO__
 
 void gbCleanUp()
 {
-    if (gbRam != NULL) {
+    if (gbRam != nullptr) {
         free(gbRam);
-        gbRam = NULL;
+        gbRam = nullptr;
     }
 
-    if (gbRom != NULL) {
+    if (gbRom != nullptr) {
         free(gbRom);
-        gbRom = NULL;
+        gbRom = nullptr;
     }
 
-    if (bios != NULL) {
+    if (bios != nullptr) {
         free(bios);
-        bios = NULL;
+        bios = nullptr;
     }
 
-    if (gbMemory != NULL) {
+    if (gbMemory != nullptr) {
         free(gbMemory);
-        gbMemory = NULL;
+        gbMemory = nullptr;
     }
 
-    if (gbLineBuffer != NULL) {
+    if (gbLineBuffer != nullptr) {
         free(gbLineBuffer);
-        gbLineBuffer = NULL;
+        gbLineBuffer = nullptr;
     }
 
-    if (pix != NULL) {
+    if (pix != nullptr) {
         free(pix);
-        pix = NULL;
+        pix = nullptr;
     }
 
     gbSgbShutdown();
 
-    if (gbVram != NULL) {
+    if (gbVram != nullptr) {
         free(gbVram);
-        gbVram = NULL;
+        gbVram = nullptr;
     }
 
-    if (gbWram != NULL) {
+    if (gbWram != nullptr) {
         free(gbWram);
-        gbWram = NULL;
+        gbWram = nullptr;
     }
 
-    if (gbTAMA5ram != NULL) {
+    if (gbTAMA5ram != nullptr) {
         free(gbTAMA5ram);
-        gbTAMA5ram = NULL;
+        gbTAMA5ram = nullptr;
     }
 
+    g_gbCartData = gbCartData();
+    g_mapper = nullptr;
+    g_mapperRAM = nullptr;
+    g_mapperReadRAM = nullptr;
+    g_mapperUpdateClock = nullptr;
     systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
+
+#if !defined(__LIBRETRO__)
+    g_vbamIoVecs.clear();
+#endif  // !__LIBRETRO__
 }
 
-bool gbLoadRom(const char* szFile)
-{
-    int size = 0;
+bool gbLoadRom(const char* filename) {
+    int romSize = 0;
 
-    if (gbRom != NULL) {
+    if (gbRom != nullptr) {
         gbCleanUp();
     }
 
     systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
 
-    gbRom = utilLoad(szFile,
-        utilIsGBImage,
-        NULL,
-        size);
+    gbRom = utilLoad(filename, utilIsGBImage, nullptr, romSize);
     if (!gbRom)
         return false;
 
-    gbRomSize = size;
+    g_gbBatteryError = false;
 
-    gbBatteryError = false;
-
-    if (bios != NULL) {
+    if (bios != nullptr) {
         free(bios);
-        bios = NULL;
+        bios = nullptr;
     }
-    bios = (uint8_t*)calloc(1, 0x900);
-
-    if (!gbCheckRomHeader())
-        return false;
-
-    return gbUpdateSizes();
-}
-
-bool gbUpdateSizes()
-{
-    if (gbRom[0x148] > 8) {
-        systemMessage(MSG_UNSUPPORTED_ROM_SIZE,
-            N_("Unsupported rom size %02x"), gbRom[0x148]);
+    bios = (uint8_t*)calloc(1, kGBBiosBufferSize);
+    if (bios == nullptr) {
         return false;
     }
 
-    if (gbRomSize < gbRomSizes[gbRom[0x148]]) {
-        uint8_t* gbRomNew = (uint8_t*)realloc(gbRom, gbRomSizes[gbRom[0x148]]);
-        if (!gbRomNew) {
-            assert(false);
-            return false;
-        };
-        gbRom = gbRomNew;
-        for (int i = gbRomSize; i < gbRomSizes[gbRom[0x148]]; i++)
-            gbRom[i] = 0x00; // Not sure if it's 0x00, 0xff or random data...
-    }
-    // (it's in the case a cart is 'lying' on its size.
-    else if ((gbRomSize > gbRomSizes[gbRom[0x148]]) && (genericflashcardEnable)) {
-        gbRomSize = gbRomSize >> 16;
-        gbRom[0x148] = 0;
-        if (gbRomSize) {
-            while (!((gbRomSize & 1) || (gbRom[0x148] == 7))) {
-                gbRom[0x148]++;
-                gbRomSize >>= 1;
-            }
-            gbRom[0x148]++;
-        }
-        uint8_t* gbRomNew = (uint8_t*)realloc(gbRom, gbRomSizes[gbRom[0x148]]);
-        if (!gbRomNew) {
-            assert(false);
-            return false;
-        };
-        gbRom = gbRomNew;
-    }
-    gbRomSize = gbRomSizes[gbRom[0x148]];
-    gbRomSizeMask = gbRomSizesMasks[gbRom[0x148]];
-
-    // The 'genericflashcard' option allows some PD to work.
-    // However, the setting is dangerous (if you let in enabled
-    // and play a normal game, it might just break everything).
-    // That's why it is not saved in the emulator options.
-    // Also I added some checks in VBA to make sure your saves will not be
-    // overwritten if you wrongly enable this option for a game
-    // you already played (and vice-versa, ie. if you forgot to
-    // enable the option for a game you played with it enabled, like Shawu Story).
-    uint8_t ramsize = genericflashcardEnable ? 5 : gbRom[0x149];
-    gbRom[0x149] = ramsize;
-
-    if ((gbRom[2] == 0x6D) && (gbRom[5] == 0x47) && (gbRom[6] == 0x65) && (gbRom[7] == 0x6E) && (gbRom[8] == 0x69) && (gbRom[9] == 0x65) && (gbRom[0xA] == 0x28) && (gbRom[0xB] == 0x54)) {
-        gbCheatingDevice = 1; // GameGenie
-        for (int i = 0; i < 0x20; i++) // Cleans GG hardware registers
-            gbRom[0x4000 + i] = 0;
-    } else if (((gbRom[0x104] == 0x44) && (gbRom[0x156] == 0xEA) && (gbRom[0x158] == 0x7F) && (gbRom[0x159] == 0xEA) && (gbRom[0x15B] == 0x7F)) || ((gbRom[0x165] == 0x3E) && (gbRom[0x166] == 0xD9) && (gbRom[0x16D] == 0xE1) && (gbRom[0x16E] == 0x7F)))
-        gbCheatingDevice = 2; // GameShark
-    else
-        gbCheatingDevice = 0;
-
-    if (ramsize > 5) {
-        systemMessage(MSG_UNSUPPORTED_RAM_SIZE,
-            N_("Unsupported ram size %02x"), gbRom[0x149]);
+    gbMemory = (uint8_t*)malloc(65536);
+    if (gbMemory == nullptr) {
         return false;
     }
 
-    gbRamSize = gbRamSizes[ramsize];
-    gbRamSizeMask = gbRamSizesMasks[ramsize];
-
-    gbRomType = gbRom[0x147];
-    if (genericflashcardEnable) {
-        /*if (gbRomType<2)
-      gbRomType =3;
-    else if ((gbRomType == 0xc) || (gbRomType == 0xf) || (gbRomType == 0x12) ||
-             (gbRomType == 0x16) || (gbRomType == 0x1a) || (gbRomType == 0x1d))
-      gbRomType++;
-    else if ((gbRomType == 0xb) || (gbRomType == 0x11) || (gbRomType == 0x15) ||
-             (gbRomType == 0x19) || (gbRomType == 0x1c))
-      gbRomType+=2;
-    else if ((gbRomType == 0x5) || (gbRomType == 0x6))
-      gbRomType = 0x1a;*/
-        gbRomType = 0x1b;
-    } else if (gbCheatingDevice == 1)
-        gbRomType = 0x55;
-    else if (gbCheatingDevice == 2)
-        gbRomType = 0x56;
-
-    gbRom[0x147] = gbRomType;
-
-    mapperReadRAM = NULL;
-
-    switch (gbRomType) {
-    case 0x00:
-    case 0x01:
-    case 0x02:
-    case 0x03:
-    case 0x08:
-    case 0x09:
-        // MBC 1
-        mapper = mapperMBC1ROM;
-        mapperRAM = mapperMBC1RAM;
-        mapperReadRAM = mapperMBC1ReadRAM;
-        break;
-    case 0x05:
-    case 0x06:
-        // MBC2
-        mapper = mapperMBC2ROM;
-        mapperRAM = mapperMBC2RAM;
-        gbRamSize = 0x200;
-        gbRamSizeMask = 0x1ff;
-        break;
-    case 0x0b:
-    case 0x0c:
-    case 0x0d:
-        // MMM01
-        mapper = mapperMMM01ROM;
-        mapperRAM = mapperMMM01RAM;
-        break;
-    case 0x0f:
-    case 0x10:
-    case 0x11:
-    case 0x12:
-    case 0x13:
-    case 0xfc:
-        // MBC 3
-        mapper = mapperMBC3ROM;
-        mapperRAM = mapperMBC3RAM;
-        mapperReadRAM = mapperMBC3ReadRAM;
-        break;
-    case 0x19:
-    case 0x1a:
-    case 0x1b:
-        // MBC5
-        mapper = mapperMBC5ROM;
-        mapperRAM = mapperMBC5RAM;
-        mapperReadRAM = mapperMBC5ReadRAM;
-        break;
-    case 0x1c:
-    case 0x1d:
-    case 0x1e:
-        // MBC 5 Rumble
-        mapper = mapperMBC5ROM;
-        mapperRAM = mapperMBC5RAM;
-        mapperReadRAM = mapperMBC5ReadRAM;
-        break;
-    case 0x22:
-        // MBC 7
-        mapper = mapperMBC7ROM;
-        mapperRAM = mapperMBC7RAM;
-        mapperReadRAM = mapperMBC7ReadRAM;
-        gbRamSize = 0x200;
-        gbRamSizeMask = 0x1ff;
-        break;
-    // GG (GameGenie)
-    case 0x55:
-        mapper = mapperGGROM;
-        break;
-    case 0x56:
-        // GS (GameShark)
-        mapper = mapperGS3ROM;
-        break;
-    case 0xfd:
-        // TAMA5
-        if (gbRam != NULL) {
-            free(gbRam);
-            gbRam = NULL;
-        }
-
-        ramsize = 3;
-        gbRamSize = gbRamSizes[3];
-        gbRamSizeMask = gbRamSizesMasks[3];
-        gbRamFill = 0x0;
-
-        gbTAMA5ramSize = 0x100;
-
-        if (gbTAMA5ram == NULL)
-            gbTAMA5ram = (uint8_t*)malloc(gbTAMA5ramSize);
-        memset(gbTAMA5ram, 0x0, gbTAMA5ramSize);
-
-        mapperRAM = mapperTAMA5RAM;
-        mapperReadRAM = mapperTAMA5ReadRAM;
-        mapperUpdateClock = memoryUpdateTAMA5Clock;
-        break;
-    case 0xfe:
-        // HuC3
-        mapper = mapperHuC3ROM;
-        mapperRAM = mapperHuC3RAM;
-        mapperReadRAM = mapperHuC3ReadRAM;
-        break;
-    case 0xff:
-        // HuC1
-        mapper = mapperHuC1ROM;
-        mapperRAM = mapperHuC1RAM;
-        break;
-    default:
-        systemMessage(MSG_UNKNOWN_CARTRIDGE_TYPE,
-            N_("Unknown cartridge type %02x"), gbRomType);
+    pix = (uint8_t*)calloc(1, kGBPixSize);
+    if (pix == nullptr) {
         return false;
     }
 
-    if (gbRamSize) {
-        gbRam = (uint8_t*)malloc(gbRamSize);
-        memset(gbRam, gbRamFill, gbRamSize);
+    gbLineBuffer = (uint16_t*)malloc(kGBLineBufferSize);
+    if (gbLineBuffer == nullptr) {
+        return false;
     }
 
-    switch (gbRomType) {
-    case 0x03:
-    case 0x06:
-    case 0x0d:
-    case 0x0f:
-    case 0x10:
-    case 0x13:
-    case 0x1b:
-    case 0x1d:
-    case 0x1e:
-    case 0x22:
-    case 0xfd:
-    case 0xfe:
-    case 0xff:
-        gbBattery = 1;
-        break;
-    default:
-        gbBattery = 0;
-        break;
-    }
-
-    switch (gbRomType) {
-    case 0x1c:
-    case 0x1d:
-    case 0x1e:
-        gbRumble = 1;
-        break;
-    default:
-        gbRumble = 0;
-        break;
-    }
-
-    switch (gbRomType) {
-    case 0x0f:
-    case 0x10: // mbc3
-    case 0xfd: // tama5
-    case 0xfe:
-        gbRTCPresent = 1;
-        break;
-    default:
-        gbRTCPresent = 0;
-        break;
-    }
-
-    gbInit();
-
-    return true;
+    return gbInitializeRom(romSize);
 }
 
 int gbGetNextEvent(int _clockTicks)
@@ -4489,7 +3886,7 @@ void gbDrawLine()
         uint16_t* dest = (uint16_t*)pix + (gbBorderLineSkip + 2) * (register_LY + gbBorderRowSkip + 1)
             + gbBorderColumnSkip;
 #endif
-        for (int x = 0; x < 160;) {
+        for (size_t x = 0; x < kGBWidth;) {
             *dest++ = systemColorMap16[gbLineMix[x++]];
             *dest++ = systemColorMap16[gbLineMix[x++]];
             *dest++ = systemColorMap16[gbLineMix[x++]];
@@ -4519,7 +3916,7 @@ void gbDrawLine()
 
     case 24: {
         uint8_t* dest = (uint8_t*)pix + 3 * (gbBorderLineSkip * (register_LY + gbBorderRowSkip) + gbBorderColumnSkip);
-        for (int x = 0; x < 160;) {
+        for (size_t x = 0; x < kGBWidth;) {
             *((uint32_t*)dest) = systemColorMap32[gbLineMix[x++]];
             dest += 3;
             *((uint32_t*)dest) = systemColorMap32[gbLineMix[x++]];
@@ -4566,7 +3963,7 @@ void gbDrawLine()
         uint32_t* dest = (uint32_t*)pix + (gbBorderLineSkip + 1) * (register_LY + gbBorderRowSkip + 1)
             + gbBorderColumnSkip;
 #endif
-        for (int x = 0; x < 160;) {
+        for (size_t x = 0; x < kGBWidth;) {
             *dest++ = systemColorMap32[gbLineMix[x++]];
             *dest++ = systemColorMap32[gbLineMix[x++]];
             *dest++ = systemColorMap32[gbLineMix[x++]];
@@ -4591,8 +3988,7 @@ void gbDrawLine()
     }
 }
 
-static void gbUpdateJoypads(bool readSensors)
-{
+static void gbUpdateJoypads() {
     if (systemReadJoypads()) {
         // read joystick
         if (gbSgbMode && gbSgbMultiplayer) {
@@ -4610,7 +4006,7 @@ static void gbUpdateJoypads(bool readSensors)
         }
     }
 
-    if (readSensors && gbRomType == 0x22) {
+    if (g_gbCartData.has_sensor()) {
         systemUpdateMotionSensor();
     }
 }
@@ -4632,7 +4028,7 @@ void gbEmulate(int ticksToStop)
     bool execute = false;
     bool frameDone = false;
 
-    gbUpdateJoypads(true);
+    gbUpdateJoypads();
 
     while (1) {
         uint16_t oldPCW = PC.W;
@@ -4814,7 +4210,7 @@ void gbEmulate(int ticksToStop)
                     case 0: {
                         // H-Blank
                         // check if we reached the V-Blank period
-                        if (register_LY == 144) {
+                        if (register_LY == kGBHeight) {
                             // Yes, V-Blank
                             // set the LY increment counter
                             if (gbHardware & 0x5) {
@@ -4889,7 +4285,7 @@ void gbEmulate(int ticksToStop)
                                 int tempinUseRegister_WY = inUseRegister_WY;
                                 int tempgbWindowLine = gbWindowLine;
 
-                                if ((tempgbWindowLine == -1) || (tempgbWindowLine > 144)) {
+                                if ((tempgbWindowLine == -1) || (tempgbWindowLine > (int)kGBHeight)) {
                                     tempinUseRegister_WY = oldRegister_WY;
                                     if (register_LY > oldRegister_WY)
                                         tempgbWindowLine = 146;
@@ -4958,17 +4354,17 @@ void gbEmulate(int ticksToStop)
                     static uint32_t last_throttle;
 
                     if (turbo_button_pressed) {
-                        if (speedup_frame_skip)
-                            framesToSkip = speedup_frame_skip;
+                        if (coreOptions.speedup_frame_skip)
+                            framesToSkip = coreOptions.speedup_frame_skip;
                         else {
-                            if (!speedup_throttle_set && throttle != speedup_throttle) {
-                                last_throttle = throttle;
-                                soundSetThrottle(speedup_throttle);
+                            if (!speedup_throttle_set && coreOptions.throttle != coreOptions.speedup_throttle) {
+                                last_throttle = coreOptions.throttle;
+                                soundSetThrottle(coreOptions.speedup_throttle);
                                 speedup_throttle_set = true;
                             }
 
-                            if (speedup_throttle_frame_skip)
-                                framesToSkip += std::ceil(double(speedup_throttle) / 100.0) - 1;
+                            if (coreOptions.speedup_throttle_frame_skip)
+                                framesToSkip += std::ceil(double(coreOptions.speedup_throttle) / 100.0) - 1;
                         }
                     }
                     else if (speedup_throttle_set) {
@@ -4996,7 +4392,7 @@ void gbEmulate(int ticksToStop)
                         if (gbWindowLine < 0)
                             oldRegister_WY = register_WY;
                         // check if we reached the V-Blank period
-                        if (register_LY == 144) {
+                        if (register_LY == kGBHeight) {
                             // Yes, V-Blank
                             // set the LY increment counter
 
@@ -5016,7 +4412,7 @@ void gbEmulate(int ticksToStop)
                             gbSoundTick(soundTicks);
 
                             if ((gbFrameCount % 10) == 0)
-                                system10Frames(60);
+                                system10Frames();
 
                             if (gbFrameCount >= 60) {
                                 uint32_t currentTime = systemGetClock();
@@ -5036,10 +4432,10 @@ void gbEmulate(int ticksToStop)
 
                             newmask = (gbJoymask[0] >> 10);
 
-                            speedup = false;
+                            coreOptions.speedup = false;
 
                             if (newmask & 1 && !speedup_throttle_set)
-                                speedup = true;
+                                coreOptions.speedup = true;
 
                             gbCapture = (newmask & 2) ? true : false;
 
@@ -5098,7 +4494,7 @@ void gbEmulate(int ticksToStop)
 
                         // OAM and VRAM in use
                         // next mode is H-Blank
-                        if ((register_LY < 144) && (register_LCDC & 0x80) && gbScreenOn) {
+                        if ((register_LY < kGBHeight) && (register_LCDC & 0x80) && gbScreenOn) {
                             if (!gbSgbMask) {
                                 if (gbFrameSkipCount >= framesToSkip) {
                                     if (!gbBlackScreen) {
@@ -5108,7 +4504,7 @@ void gbEmulate(int ticksToStop)
                                         uint16_t color = gbColorOption ? gbColorFilter[0] : 0;
                                         if (!gbCgbMode)
                                             color = gbColorOption ? gbColorFilter[gbPalette[3] & 0x7FFF] : gbPalette[3] & 0x7FFF;
-                                        for (int i = 0; i < 160; i++) {
+                                        for (size_t i = 0; i < kGBWidth; i++) {
                                             gbLineMix[i] = color;
                                             gbLineBuffer[i] = 0;
                                         }
@@ -5173,7 +4569,7 @@ void gbEmulate(int ticksToStop)
                         uint16_t color = gbColorOption ? gbColorFilter[0x7FFF] : 0x7FFF;
                         if (!gbCgbMode)
                             color = gbColorOption ? gbColorFilter[gbPalette[0] & 0x7FFF] : gbPalette[0] & 0x7FFF;
-                        for (int i = 0; i < 160; i++) {
+                        for (size_t i = 0; i < kGBWidth; i++) {
                             gbLineMix[i] = color;
                             gbLineBuffer[i] = 0;
                         }
@@ -5189,19 +4585,19 @@ void gbEmulate(int ticksToStop)
                 while (gbLcdLYIncrementTicks <= 0) {
                     register_LY = ((register_LY + 1) % 154);
                     gbLcdLYIncrementTicks += GBLY_INCREMENT_CLOCK_TICKS;
-                    if (register_LY < 144) {
+                    if (register_LY < kGBHeight) {
 
                         uint16_t color = gbColorOption ? gbColorFilter[0x7FFF] : 0x7FFF;
                         if (!gbCgbMode)
                             color = gbColorOption ? gbColorFilter[gbPalette[0] & 0x7FFF] : gbPalette[0] & 0x7FFF;
-                        for (int i = 0; i < 160; i++) {
+                        for (size_t i = 0; i < kGBWidth; i++) {
                             gbLineMix[i] = color;
                             gbLineBuffer[i] = 0;
                         }
                         gbDrawLine();
-                    } else if ((register_LY == 144) && (!systemFrameSkip)) {
+                    } else if ((register_LY == kGBHeight) && (!systemFrameSkip)) {
                         int framesToSkip = systemFrameSkip;
-                        //if (speedup)
+                        //if (coreOptions.speedup)
                         //    framesToSkip = 9; // try 6 FPS during speedup
                         if ((gbFrameSkipCount >= framesToSkip) || (gbWhiteScreen == 1)) {
                             gbWhiteScreen = 2;
@@ -5224,7 +4620,7 @@ void gbEmulate(int ticksToStop)
                         gbSoundTick(soundTicks);
 
                         if ((gbFrameCount % 10) == 0)
-                            system10Frames(60);
+                            system10Frames();
 
                         if (gbFrameCount >= 60) {
                             uint32_t currentTime = systemGetClock();
@@ -5492,36 +4888,67 @@ void gbEmulate(int ticksToStop)
     }
 }
 
-bool gbLoadRomData(const char* data, unsigned size)
-{
-    gbRomSize = size;
-    if (gbRom != NULL) {
+bool gbLoadRomData(const char* data, size_t size) {
+    if (gbRom != nullptr) {
         gbCleanUp();
     }
 
     systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
 
-    gbRom = (uint8_t*)calloc(1, gbRomSize);
-    if (gbRom == NULL) {
-        return 0;
+    gbRom = (uint8_t*)calloc(1, size);
+    if (gbRom == nullptr) {
+        return false;
     }
 
-    memcpy(gbRom, data, gbRomSize);
+    memcpy(gbRom, data, size);
 
-    gbBatteryError = false;
+    g_gbBatteryError = false;
 
-    if (bios != NULL) {
+    if (bios != nullptr) {
         free(bios);
-        bios = NULL;
+        bios = nullptr;
     }
-    bios = (uint8_t*)calloc(1, 0x900);
-    return gbUpdateSizes();
+
+    bios = (uint8_t*)calloc(1, kGBBiosBufferSize);
+    if (bios == nullptr) {
+        return false;
+    }
+
+    gbMemory = (uint8_t*)malloc(65536);
+    if (gbMemory == nullptr) {
+        return false;
+    }
+
+    pix = (uint8_t*)calloc(1, kGBPixSize);
+    if (pix == nullptr) {
+        return false;
+    }
+
+    gbLineBuffer = (uint16_t*)malloc(kGBLineBufferSize);
+    if (gbLineBuffer == nullptr) {
+        return false;
+    }
+
+    return gbInitializeRom(size);
 }
+
+#ifndef __LIBRETRO__
+bool gbApplyPatch(const char* patchName) {
+    int size = g_gbCartData.rom_size();
+    if (!applyPatch(patchName, &gbRom, &size)) {
+        return false;
+    }
+
+    // We should re-parse the header every time in case a patch has changed the
+    // ROM header.
+    return gbInitializeRom(size);
+}
+#endif  // __LIBRETRO__
 
 #ifdef __LIBRETRO__
 #include <stddef.h>
 
-unsigned int gbWriteSaveState(uint8_t* data, unsigned)
+unsigned int gbWriteSaveState(uint8_t* data)
 {
 	uint8_t* orig = data;
 
@@ -5529,7 +4956,7 @@ unsigned int gbWriteSaveState(uint8_t* data, unsigned)
 
     utilWriteMem(data, &gbRom[0x134], 15);
 
-    utilWriteIntMem(data, useBios);
+    utilWriteIntMem(data, coreOptions.useBios);
     utilWriteIntMem(data, inBios);
 
     utilWriteDataMem(data, gbSaveGameStruct);
@@ -5546,25 +4973,25 @@ unsigned int gbWriteSaveState(uint8_t* data, unsigned)
     utilWriteMem(data, &gbDataMBC5, sizeof(gbDataMBC5));
     utilWriteMem(data, &gbDataHuC1, sizeof(gbDataHuC1));
     utilWriteMem(data, &gbDataHuC3, sizeof(gbDataHuC3));
-    if (gbRomType == 0xfe) // HuC3 rtc data
+    if (g_gbCartData.mapper_type() == gbCartData::MapperType::kHuC3)
         utilWriteMem(data, &gbRTCHuC3, sizeof(gbRTCHuC3));
     utilWriteMem(data, &gbDataTAMA5, sizeof(gbDataTAMA5));
-    if (gbTAMA5ram != NULL)
-        utilWriteMem(data, gbTAMA5ram, gbTAMA5ramSize);
+    if (gbTAMA5ram != nullptr)
+        utilWriteMem(data, gbTAMA5ram, kTama5RamSize);
     utilWriteMem(data, &gbDataMMM01, sizeof(gbDataMMM01));
 
-    utilWriteMem(data, gbPalette, 128 * sizeof(uint16_t));
+    utilWriteMem(data, gbPalette, sizeof(gbPalette));
 
     utilWriteMem(data, &gbMemory[0x8000], 0x8000);
 
-    if (gbRamSize && gbRam) {
-        utilWriteIntMem(data, gbRamSize);
-        utilWriteMem(data, gbRam, gbRamSize);
+    if (g_gbCartData.HasRam()) {
+        utilWriteIntMem(data, g_gbCartData.ram_size());
+        utilWriteMem(data, gbRam, g_gbCartData.ram_size());
     }
 
     if (gbCgbMode) {
-        utilWriteMem(data, gbVram, 0x4000);
-        utilWriteMem(data, gbWram, 0x8000);
+        utilWriteMem(data, gbVram, kGBVRamSize);
+        utilWriteMem(data, gbWram, kGBWRamSize);
     }
 
     gbSoundSaveGame(data);
@@ -5589,7 +5016,7 @@ unsigned int gbWriteSaveState(uint8_t* data, unsigned)
 	return (ptrdiff_t)data - (ptrdiff_t)orig;
 }
 
-bool gbReadSaveState(const uint8_t* data, unsigned)
+bool gbReadSaveState(const uint8_t* data)
 {
     int version = utilReadIntMem(data);
 
@@ -5616,8 +5043,8 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
     ub = utilReadIntMem(data) ? true : false;
     ib = utilReadIntMem(data) ? true : false;
 
-    if ((ub != useBios) && (ib)) {
-        if (useBios)
+    if ((ub != coreOptions.useBios) && (ib)) {
+        if (coreOptions.useBios)
             systemMessage(MSG_SAVE_GAME_NOT_USING_BIOS,
                 N_("Save game is not using the BIOS files"));
         else
@@ -5633,28 +5060,35 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
     utilReadDataMem(data, gbSaveGameStruct);
 
     // Correct crash when loading color gameboy save in regular gameboy type.
-    if (!gbCgbMode) {
-        if (gbVram != NULL) {
-            free(gbVram);
-            gbVram = NULL;
+    if (gbCgbMode) {
+        if (gbVram == nullptr) {
+            gbVram = (uint8_t*)calloc(1, kGBVRamSize);
+            if (gbVram == nullptr) {
+                return false;
+            }
         }
-        if (gbWram != NULL) {
-            free(gbWram);
-            gbWram = NULL;
+        if (gbWram == nullptr) {
+            gbWram = (uint8_t*)malloc(kGBWRamSize);
+            if (gbWram == nullptr) {
+                return false;
+            }
         }
+        memset(gbPalette, 0, sizeof(gbPalette));
     } else {
-        if (gbVram == NULL)
-            gbVram = (uint8_t*)malloc(0x4000);
-        if (gbWram == NULL)
-            gbWram = (uint8_t*)malloc(0x8000);
-        memset(gbVram, 0, 0x4000);
-        memset(gbPalette, 0, 2 * 128);
+        if (gbVram != nullptr) {
+            free(gbVram);
+            gbVram = nullptr;
+        }
+        if (gbWram != nullptr) {
+            free(gbWram);
+            gbWram = nullptr;
+        }
     }
 
     utilReadMem(&IFF, data, 2);
 
     if (gbSgbMode) {
-        gbSgbReadGame(data, version);
+        gbSgbReadGame(data);
     } else {
         gbSgbMask = 0; // loading a game at the wrong time causes no display
     }
@@ -5665,23 +5099,24 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
     utilReadMem(&gbDataMBC5, data, sizeof(gbDataMBC5));
     utilReadMem(&gbDataHuC1, data, sizeof(gbDataHuC1));
     utilReadMem(&gbDataHuC3, data, sizeof(gbDataHuC3));
-    if (gbRomType == 0xfe) // HuC3 rtc data
+    if (g_gbCartData.mapper_type() == gbCartData::MapperType::kHuC3)
         utilReadMem(&gbRTCHuC3, data, sizeof(gbRTCHuC3));
     utilReadMem(&gbDataTAMA5, data, sizeof(gbDataTAMA5));
     if (gbTAMA5ram != NULL) {
-        utilReadMem(gbTAMA5ram, data, gbTAMA5ramSize);
+        utilReadMem(gbTAMA5ram, data, kTama5RamSize);
     }
     utilReadMem(&gbDataMMM01, data, sizeof(gbDataMMM01));
 
-    utilReadMem(gbPalette, data, 128 * sizeof(uint16_t));
+    utilReadMem(gbPalette, data, sizeof(gbPalette));
 
     utilReadMem(&gbMemory[0x8000], data, 0x8000);
 
-    if (gbRamSize && gbRam) {
+    if (g_gbCartData.HasRam()) {
+        int cartRamSize = g_gbCartData.ram_size();
         int ramSize = utilReadIntMem(data);
-        utilReadMem(gbRam, data, (gbRamSize > ramSize) ? ramSize : gbRamSize); //read
-        /*if (ramSize > gbRamSize)
-            utilGzSeek(gzFile, ramSize - gbRamSize, SEEK_CUR);*/ // Libretro Note: ????
+        utilReadMem(gbRam, data, std::min(cartRamSize, ramSize)); //read
+        /*if (ramSize > cartRamSize)
+            utilGzSeek(gzFile, ramSize - cartRamSize, SEEK_CUR);*/ // Libretro Note: ????
     }
 
     memset(gbSCYLine, register_SCY, sizeof(gbSCYLine));
@@ -5695,9 +5130,9 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
         gbMemoryMap[0x00] = &gbMemory[0x0000];
         if (gbHardware & 5) {
             memcpy((uint8_t*)(gbMemory), (uint8_t*)(gbRom), 0x1000);
-            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), 0x100);
+            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), kGBBiosSize);
         } else if (gbHardware & 2) {
-            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), 0x900);
+            memcpy((uint8_t*)(gbMemory), (uint8_t*)(bios), kCGBBiosSize);
             memcpy((uint8_t*)(gbMemory + 0x100), (uint8_t*)(gbRom + 0x100), 0x100);
         }
 
@@ -5721,70 +5156,48 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
     gbMemoryMap[0x0e] = &gbMemory[0xe000];
     gbMemoryMap[0x0f] = &gbMemory[0xf000];
 
-    switch (gbRomType) {
-    case 0x00:
-    case 0x01:
-    case 0x02:
-    case 0x03:
-        // MBC 1
-        memoryUpdateMapMBC1();
-        break;
-    case 0x05:
-    case 0x06:
-        // MBC2
-        memoryUpdateMapMBC2();
-        break;
-    case 0x0b:
-    case 0x0c:
-    case 0x0d:
-        // MMM01
-        memoryUpdateMapMMM01();
-        break;
-    case 0x0f:
-    case 0x10:
-    case 0x11:
-    case 0x12:
-    case 0x13:
-        // MBC 3
-        memoryUpdateMapMBC3();
-        break;
-    case 0x19:
-    case 0x1a:
-    case 0x1b:
-        // MBC5
-        memoryUpdateMapMBC5();
-        break;
-    case 0x1c:
-    case 0x1d:
-    case 0x1e:
-        // MBC 5 Rumble
-        memoryUpdateMapMBC5();
-        break;
-    case 0x22:
-        // MBC 7
-        memoryUpdateMapMBC7();
-        break;
-    case 0x56:
-        // GS3
-        memoryUpdateMapGS3();
-        break;
-    case 0xfd:
-        // TAMA5
-        memoryUpdateMapTAMA5();
-        break;
-    case 0xfe:
-        // HuC3
-        memoryUpdateMapHuC3();
-        break;
-    case 0xff:
-        // HuC1
-        memoryUpdateMapHuC1();
-        break;
+    switch (g_gbCartData.mapper_type()) {
+        case gbCartData::MapperType::kNone:
+        case gbCartData::MapperType::kMbc1:
+            memoryUpdateMapMBC1();
+            break;
+        case gbCartData::MapperType::kMbc2:
+            memoryUpdateMapMBC2();
+            break;
+        case gbCartData::MapperType::kMmm01:
+            memoryUpdateMapMMM01();
+            break;
+        case gbCartData::MapperType::kMbc3:
+            memoryUpdateMapMBC3();
+            break;
+        case gbCartData::MapperType::kMbc5:
+            memoryUpdateMapMBC5();
+        case gbCartData::MapperType::kMbc7:
+            memoryUpdateMapMBC7();
+            break;
+        case gbCartData::MapperType::kGameShark:
+            memoryUpdateMapGS3();
+            break;
+        case gbCartData::MapperType::kTama5:
+            memoryUpdateMapTAMA5();
+            break;
+        case gbCartData::MapperType::kHuC3:
+            memoryUpdateMapHuC3();
+            break;
+        case gbCartData::MapperType::kHuC1:
+            memoryUpdateMapHuC1();
+            break;
+        case gbCartData::MapperType::kMbc6:
+        case gbCartData::MapperType::kPocketCamera:
+        case gbCartData::MapperType::kGameGenie:
+        case gbCartData::MapperType::kUnknown:
+            // Do nothing.
+            break;
     }
 
     if (gbCgbMode) {
-        utilReadMem(gbVram, data, 0x4000);
-        utilReadMem(gbWram, data, 0x8000);
+        utilReadMem(gbVram, data, kGBVRamSize);
+        utilReadMem(gbWram, data, kGBWRamSize);
 
         int value = register_SVBK;
         if (value == 0)
@@ -5796,10 +5209,10 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
         gbMemoryMap[0x0d] = &gbWram[value * 0x1000];
     }
 
-    gbSoundReadGame(data, version);
+    gbSoundReadGame(data);
 
     if (gbCgbMode && gbSgbMode) {
-        gbSgbMode = 0;
+        gbSgbMode = false;
     }
 
     if (gbBorderOn && !gbSgbMask) {
@@ -5824,32 +5237,14 @@ bool gbReadSaveState(const uint8_t* data, unsigned)
 
     systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
 
-    if (version >= 12 && utilReadIntMem(data) != 0x12345678)
-        assert(false); // fails if something read too much/little from file
+    if (version >= 12 && utilReadIntMem(data) != 0x12345678) {
+        // fails if something read too much/little from file
+        return false;
+    }
 
     return true;
 }
-
-bool gbWriteMemSaveState(char*, int, long&)
-{
-	return false;
-}
-
-bool gbReadMemSaveState(char*, int)
-{
-    return false;
-}
-
-bool gbReadBatteryFile(const char*)
-{
-    return false;
-}
-
-bool gbWriteBatteryFile(const char*)
-{
-    return false;
-}
-#endif
+#endif /* __LIBRETRO__ */
 
 struct EmulatedSystem GBSystem = {
     // emuMain
@@ -5858,10 +5253,20 @@ struct EmulatedSystem GBSystem = {
     gbReset,
     // emuCleanUp
     gbCleanUp,
+#ifdef __LIBRETRO__
+    NULL,               // emuReadBattery
+    NULL,               // emuWriteBattery
+    gbReadSaveState,    // emuReadState
+    gbWriteSaveState,   // emuWriteState
+    NULL,               // emuReadMemState
+    NULL,               // emuWriteMemState
+    NULL,               // emuWritePNG
+    NULL,               // emuWriteBMP
+#else    
     // emuReadBattery
-    gbReadBatteryFile,
+    ReadBatteryFile,
     // emuWriteBattery
-    gbWriteBatteryFile,
+    WriteBatteryFile,
     // emuReadState
     gbReadSaveState,
     // emuWriteState
@@ -5874,6 +5279,7 @@ struct EmulatedSystem GBSystem = {
     gbWritePNGFile,
     // emuWriteBMP
     gbWriteBMPFile,
+#endif /* ! __LIBRETRO__ */
     // emuUpdateCPSR
     NULL,
     // emuHasDebugger

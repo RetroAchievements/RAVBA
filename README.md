@@ -6,6 +6,8 @@
   - [Building](#building)
   - [Building a Libretro core](#building-a-libretro-core)
   - [Visual Studio Support](#visual-studio-support)
+  - [Visual Studio Code Support](#visual-studio-code-support)
+    - [Optional: clangd](#optional-clangd)
   - [Dependencies](#dependencies)
   - [Cross compiling for 32 bit on a 64 bit host](#cross-compiling-for-32-bit-on-a-64-bit-host)
   - [Cross Compiling for Win32](#cross-compiling-for-win32)
@@ -18,10 +20,18 @@
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 [![Join the chat at https://gitter.im/visualboyadvance-m/Lobby](https://badges.gitter.im/visualboyadvance-m/Lobby.svg)](https://gitter.im/visualboyadvance-m/Lobby)
-[![travis](https://travis-ci.org/visualboyadvance-m/visualboyadvance-m.svg?branch=master)](https://travis-ci.org/visualboyadvance-m/visualboyadvance-m)
-[![appveyor](https://ci.appveyor.com/api/projects/status/5ckx25vct1q1ovfc?svg=true)](https://ci.appveyor.com/project/ZachBacon65337/visualboyadvance-m-2ys5r)
 
+Our bridged Discord server is [Here](https://discord.gg/EpfxEuGMKH).
+
+We are also on *`#vba-m`* on [Libera IRC](https://libera.chat/) which has a [Web
+Chat](https://web.libera.chat/).
+
+[![Get it from flathub](https://dl.flathub.org/assets/badges/flathub-badge-en.svg)](https://flathub.org/apps/com.vba_m.visualboyadvance-m)
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/visualboyadvance-m)
+
+***Want to know where you can install visualboyadvance-m in your linux distribution?***
+
+[![Packaging status](https://repology.org/badge/vertical-allrepos/visualboyadvance-m.svg)](https://repology.org/project/visualboyadvance-m/versions)
 
 # Visual Boy Advance - M
 
@@ -33,7 +43,7 @@ Windows and Mac builds are in the [releases tab](https://github.com/visualboyadv
 
 Nightly builds for Windows and macOS are at [https://nightly.vba-m.com/](https://nightly.vba-m.com/).
 
-**PLESE TEST THE NIGHTLY OR MASTER WITH A FACTORY RESET BEFORE REPORTING
+**PLEASE TEST THE NIGHTLY OR MASTER WITH A FACTORY RESET BEFORE REPORTING
 ISSUES**
 
 Your distribution may have packages available as well, search for
@@ -106,6 +116,24 @@ cmake .. -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_BUILD_TYPE=Debug -G N
 ninja
 ```
 
+## Visual Studio Code Support
+
+Make sure the
+[C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
+and [CMake
+Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
+extensions are installed.
+
+Add the following to your `settings.json`:
+
+```json
+{
+    "cmake.configureOnOpen": true,
+    "cmake.preferredGenerators": [ "Ninja" ]
+}
+```
+.
+
 ## Dependencies
 
 If your OS is not supported, you will need the following:
@@ -124,7 +152,7 @@ And the following development libraries:
 - [gettext](https://www.gnu.org/software/gettext/) and gettext-tools (optional, with ENABLE_NLS)
 - [SDL2](https://www.libsdl.org/) (required)
 - [SFML](https://www.sfml-dev.org/) (optional, for link)
-- [OpenAL](https://www.openal.org/) or [openal-soft](https://kcat.strangesoft.net/openal.html) (optional, a sound interface)
+- [OpenAL](https://www.openal.org/) or [openal-soft](https://kcat.strangesoft.net/openal.html) (required, a sound interface)
 - [wxWidgets](https://wxwidgets.org/) (required for GUI, 2.8 and non-stl builds are no longer supported)
 
 On Linux and similar, you also need the version of GTK your wxWidgets is linked
@@ -142,7 +170,7 @@ This is supported on Fedora, Arch, Solus and MSYS2.
 
 `./installdeps` takes one optional parameter for cross-compiling target, which
 may be `win32` which is an alias for `mingw-w64-i686` to target 32 bit Windows,
-or `mingw-gw64-x86_64` for 64 bit Windows targets.
+or `mingw-w64-x86_64` for 64 bit Windows targets.
 
 The target is implicit on MSys2 depending on which MINGW shell you started (the
 value of `$MSYSTEM`.)

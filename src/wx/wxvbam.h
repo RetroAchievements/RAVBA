@@ -11,17 +11,13 @@
 #include <wx/propdlg.h>
 #include <wx/datetime.h>
 
-#include "wx/joyedit.h"
-#include "wx/keyedit.h"
+#include "config/option-observer.h"
+#include "widgets/dpi-support.h"
+#include "widgets/keep-on-top-styler.h"
 #include "wx/sdljoy.h"
 #include "wx/wxmisc.h"
 #include "wxhead.h"
 
-/* yeah, they aren't needed globally, but I'm too lazy to limit where needed */
-#include "../common/ConfigManager.h"
-
-#include "../System.h"
-#include "../Util.h"
 #include "../gb/gb.h"
 #include "../gb/gbCheats.h"
 #include "../gb/gbGlobals.h"
@@ -100,15 +96,7 @@ public:
 #endif
     // without this, global accels don't always work
     int FilterEvent(wxEvent&);
-    wxAcceleratorEntry_v accels;
 
-    wxAcceleratorEntry_v GetAccels()
-    {
-        return accels;
-    }
-
-    // the main configuration
-    wxFileConfig* cfg = nullptr;
     // vba-over.ini
     wxFileConfig* overrides = nullptr;
 
@@ -147,6 +135,9 @@ protected:
 private:
     wxPathList config_path;
     char* home = nullptr;
+
+    // Main configuration file.
+    wxFileName config_file_;
 };
 
 DECLARE_APP(wxvbamApp);
@@ -195,8 +186,8 @@ enum { CMDEN_GB = (1 << 0), // GB ROM loaded
 struct checkable_mi_t {
     int cmd;
     wxMenuItem* mi;
-    bool* boolopt;
-    int *intopt, mask, val;
+    int mask, val;
+    bool initialized = false;
 };
 
 // wxArray is only for small types
@@ -216,15 +207,17 @@ extern bool pause_next;
 class MainFrame : public wxFrame {
 public:
     MainFrame();
-    ~MainFrame();
+    ~MainFrame() override;
 
     bool BindControls();
-    void MenuOptionIntMask(const char* menuName, int& field, int mask);
-    void MenuOptionIntRadioValue(const char* menuName, int& field, int mask);
-    void MenuOptionBool(const char* menuName, bool& field);
-    void GetMenuOptionInt(const char* menuName, int& field, int mask);
-    void GetMenuOptionBool(const char* menuName, bool& field);
-    void SetMenuOption(const char* menuName, int value);
+    void MenuOptionIntMask(const wxString& menuName, int field, int mask);
+    void MenuOptionIntRadioValue(const wxString& menuName, int field, int mask);
+    void MenuOptionBool(const wxString& menuName, bool field);
+    void GetMenuOptionConfig(const wxString& menu_name,
+                             const config::OptionID& option_id);
+    void GetMenuOptionInt(const wxString& menuName, int* field, int mask);
+    void GetMenuOptionBool(const wxString& menuName, bool* field);
+    void SetMenuOption(const wxString& menuName, bool value);
 
     void SetJoystick();
 
@@ -254,7 +247,9 @@ public:
 
     // adjust menus based on current cmd_enable
     void enable_menus();
+#ifndef NO_LINK
     void EnableNetworkMenu();
+#endif
 
     // adjust menus based on available save game states
     void update_state_ts(bool force = false);
@@ -264,15 +259,11 @@ public:
     int oldest_state_slot(); // or empty slot if available
     int newest_state_slot(); // or 0 if none
 
-    // system-defined accelerators
-    wxAcceleratorEntry_v sys_accels;
-    // adjust recent menu with accelerators
-    void SetRecentAccels();
-    // merge sys accels with user-defined accels (user overrides sys)
-    wxAcceleratorEntry_v get_accels(wxAcceleratorEntry_v user_accels);
-    // update menu and global accelerator table with sys+user accel defs
-    // probably not the quickest way to add/remove individual accels
-    void set_global_accels();
+    // Resets the Recent menu accelerators. Needs to be called every time the
+    // Recent menu is updated.
+    void ResetRecentAccelerators();
+    // Resets all menu accelerators.
+    void ResetMenuAccelerators();
 
     // 2.8 has no HasFocus(), and FindFocus() doesn't work right
     bool HasFocus() const
@@ -280,8 +271,10 @@ public:
         return focused;
     }
 
+#ifndef NO_LINK
     // Returns the link mode to set according to the options
     LinkMode GetConfiguredLinkMode();
+#endif
 
     void IdentifyRom();
 
@@ -359,18 +352,30 @@ private:
     checkable_mi_array_t checkable_mi;
     // recent menu item accels
     wxMenu* recent;
-    wxAcceleratorEntryUnicode recent_accel[10];
     // joystick reader
-    wxSDLJoy joy;
+    wxJoyPoller joy;
     JoystickPoller* jpoll = nullptr;
+    // quicker & more accurate than FindFocus() != NULL
+    bool focused;
+    // One-time toggle to indicate that this object is fully initialized. This
+    // used to filter events that are sent during initialization.
+    bool init_complete_ = false;
+#ifndef NO_LINK
+    const config::OptionsObserver gba_link_observer_;
+#endif
+    const widgets::KeepOnTopStyler keep_on_top_styler_;
+    const config::OptionsObserver status_bar_observer_;
+
+    // wxFrame override.
+    void SetStatusBar(wxStatusBar* menuBar) override;
 
     // helper function for adding menu to accel editor
     void add_menu_accels(wxTreeCtrl* tc, wxTreeItemId& parent, wxMenu* menu);
 
+    // For enabling / disabling the status bar.
+    void OnStatusBarChanged();
     // for detecting window focus
     void OnActivate(wxActivateEvent&);
-    // quicker & more accurate than FindFocus() != NULL
-    bool focused;
     // may work, may not...  if so, load dropped file
     void OnDropFile(wxDropFilesEvent&);
     // pop up menu in fullscreen mode
@@ -379,6 +384,8 @@ private:
     void OnClose(wxCloseEvent&);
     // window geometry
     void OnMove(wxMoveEvent& event);
+    void OnMoveStart(wxMoveEvent& event);
+    void OnMoveEnd(wxMoveEvent& event);
     void OnSize(wxSizeEvent& event);
     // Load a named wxDialog from the XRC file
     wxDialog* LoadXRCDialog(const char* name);
@@ -386,18 +393,6 @@ private:
     wxDialog* LoadXRCropertySheetDialog(const char* name);
 
 #include "cmdhandlers.h"
-};
-
-// helper class to add HiDPI awareness (mostly for Mac OS X)
-class HiDPIAware {
-public:
-    HiDPIAware() { hidpi_scale_factor = 0; }
-    virtual double HiDPIScaleFactor();
-    virtual void RequestHighResolutionOpenGLSurface();
-    virtual void GetRealPixelClientSize(int* x, int* y);
-    virtual wxWindow* GetWindow() = 0;
-private:
-    double hidpi_scale_factor;
 };
 
 // a class for polling joystick keys
@@ -434,63 +429,6 @@ enum showspeed {
     SS_DETAILED
 };
 
-enum filtfunc {
-    // this order must match order of option enum and selector widget
-    FF_NONE,
-    FF_2XSAI,
-    FF_SUPER2XSAI,
-    FF_SUPEREAGLE,
-    FF_PIXELATE,
-    FF_ADVMAME,
-    FF_BILINEAR,
-    FF_BILINEARPLUS,
-    FF_SCANLINES,
-    FF_TV,
-    FF_HQ2X,
-    FF_LQ2X,
-    FF_SIMPLE2X,
-    FF_SIMPLE3X,
-    FF_HQ3X,
-    FF_SIMPLE4X,
-    FF_HQ4X,
-    FF_XBRZ2X,
-    FF_XBRZ3X,
-    FF_XBRZ4X,
-    FF_XBRZ5X,
-    FF_XBRZ6X,
-    FF_PLUGIN // plugin must always be last
-};
-#define builtin_ff_scale(x)                                                \
-    ((x == FF_XBRZ6X) ? 6 : (x == FF_XBRZ5X)                               \
-                ? 5                                                        \
-                : (x == FF_XBRZ4X || x == FF_HQ4X || x == FF_SIMPLE4X)     \
-                    ? 4                                                    \
-                    : (x == FF_XBRZ3X || x == FF_HQ3X || x == FF_SIMPLE3X) \
-                        ? 3                                                \
-                        : x == FF_PLUGIN ? 0 : x == FF_NONE ? 1 : 2)
-
-enum ifbfunc {
-    // this order must match order of option enum and selector widget
-    IFB_NONE,
-    IFB_SMART,
-    IFB_MOTION_BLUR
-};
-
-// make sure and keep this in sync with opts.cpp!
-enum renderer {
-    RND_SIMPLE,
-    RND_OPENGL,
-    RND_DIRECT3D,
-    RND_QUARTZ2D,
-};
-
-// likewise
-enum audioapi { AUD_SDL,
-    AUD_OPENAL,
-    AUD_DIRECTSOUND,
-    AUD_XAUDIO2,
-    AUD_FAUDIO };
-
 // an unfortunate legacy default; should have a non-digit preceding %d
 // the only reason to keep it is that user can set slotdir to old dir
 // otoh, we already make some name changes (double ext strip), and
@@ -509,7 +447,7 @@ class DrawingPanelBase;
 #include <windows.h>
 #endif
 
-class GameArea : public wxPanel, public HiDPIAware {
+class GameArea : public wxPanel {
 public:
     GameArea();
     virtual ~GameArea();
@@ -605,7 +543,9 @@ public:
 // FIXME: size this properly
 #define NUM_REWINDS 8
 #define REWIND_SIZE 1024 * 512 * NUM_REWINDS
-    // FIXME: make this a config option
+
+    // Resets the panel, it will be re-created on the next frame.
+    void ResetPanel();
 
     void ShowFullScreen(bool full);
     bool IsFullScreen()
@@ -631,8 +571,6 @@ public:
     void StartGamePlayback(const wxString& fname);
     void StopGamePlayback();
 
-    virtual wxWindow* GetWindow() { return this; }
-
 protected:
     MainFrame* main_frame;
 
@@ -650,7 +588,7 @@ protected:
     void OnIdle(wxIdleEvent&);
     void OnKeyDown(wxKeyEvent& ev);
     void OnKeyUp(wxKeyEvent& ev);
-    void OnSDLJoy(wxSDLJoyEvent& ev);
+    void OnSDLJoy(wxJoyEvent& ev);
     void PaintEv(wxPaintEvent& ev);
     void EraseBackground(wxEraseEvent& ev);
     void OnSize(wxSizeEvent& ev);
@@ -665,10 +603,14 @@ public:
     void HidePointer();
     void HideMenuBar();
     void ShowMenuBar();
+    void OnGBBorderChanged(config::Option* option);
+    void UpdateLcdFilter();
+    void SuspendScreenSaver();
+    void UnsuspendScreenSaver();
 
 protected:
     void MouseEvent(wxMouseEvent&);
-    bool pointer_blanked, menu_bar_hidden = false;
+    bool pointer_blanked, menu_bar_hidden, xscreensaver_suspended = false;
     uint32_t mouse_active_time;
     wxPoint mouse_last_pos;
 #ifdef __WXMSW__
@@ -677,6 +619,14 @@ protected:
 
     DECLARE_DYNAMIC_CLASS(GameArea)
     DECLARE_EVENT_TABLE()
+
+private:
+    const config::OptionsObserver render_observer_;
+    const config::OptionsObserver scale_observer_;
+    const config::OptionsObserver gb_border_observer_;
+    const config::OptionsObserver gb_palette_observer_;
+    const config::OptionsObserver gb_declick_observer_;
+    const config::OptionsObserver lcd_filters_observer_;
 };
 
 // wxString version of OSD message
@@ -706,7 +656,7 @@ extern bool cmditem_lt(const struct cmditem& cmd1, const struct cmditem& cmd2);
 
 class FilterThread;
 
-class DrawingPanelBase : public HiDPIAware {
+class DrawingPanelBase {
 public:
     DrawingPanelBase(int _width, int _height);
     ~DrawingPanelBase();
@@ -729,8 +679,8 @@ protected:
     FilterThread* threads;
     int nthreads;
     wxSemaphore filt_done;
-    wxDynamicLibrary filt_plugin;
-    const RENDER_PLUGIN_INFO* rpi; // also flag indicating plugin loaded
+    wxDynamicLibrary filter_plugin_;
+    RENDER_PLUGIN_INFO* rpi_; // also flag indicating plugin loaded
     // largest buffer required is 32-bit * (max width + 1) * (max height + 2)
     uint8_t delta[257 * 4 * 226];
 };
@@ -748,6 +698,7 @@ public:
 
 private:
     wxTextCtrl* log;
+    widgets::KeepOnTopStyler keep_on_top_styler_;
     void Save(wxCommandEvent& ev);
     void Clear(wxCommandEvent& ev);
 
@@ -797,19 +748,34 @@ extern bool debugStartListen(int port);
 extern bool debugWaitSocket();
 #endif
 
+// supported movie format for game recording
+enum MVFormatID {
+    MV_FORMAT_ID_NONE,
+
+    /* movie formats */
+    MV_FORMAT_ID_VMV,
+    MV_FORMAT_ID_VMV1,
+    MV_FORMAT_ID_VMV2,
+};
+std::vector<MVFormatID> getSupMovFormatsToRecord();
+std::vector<char*> getSupMovNamesToRecord();
+std::vector<char*> getSupMovExtsToRecord();
+std::vector<MVFormatID> getSupMovFormatsToPlayback();
+std::vector<char*> getSupMovNamesToPlayback();
+std::vector<char*> getSupMovExtsToPlayback();
+
 // perhaps these functions should not be called systemXXX
 // perhaps they should move to panel.cpp/GameArea
 // but they must integrate with systemReadJoypad
-void systemStartGameRecording(const wxString& fname);
+void systemStartGameRecording(const wxString& fname, MVFormatID format);
 void systemStopGameRecording();
-void systemStartGamePlayback(const wxString& fname);
+void systemStartGamePlayback(const wxString& fname, MVFormatID format);
 void systemStopGamePlayback();
 
 // true if turbo mode (like pressing turbo button constantly)
 extern bool turbo;
 
-// mask of key press flags; see below
-extern int joypress[4], autofire, autohold;
+extern int autofire, autohold;
 
 // FIXME: these defines should be global to project and used instead of raw numbers
 #define KEYM_A (1 << 0)

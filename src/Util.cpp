@@ -60,7 +60,7 @@ static int(ZEXPORT *utilGzReadFunc)(gzFile, voidp, unsigned int) = NULL;
 static int(ZEXPORT *utilGzCloseFunc)(gzFile) = NULL;
 static z_off_t(ZEXPORT *utilGzSeekFunc)(gzFile, z_off_t, int) = NULL;
 
-#define MAX_CART_SIZE 0x2000000 // 32MB
+#define MAX_CART_SIZE 0x8000000 // 128MB
 
 bool FileExists(const char *filename)
 {
@@ -307,6 +307,7 @@ void utilPutWord(uint8_t *p, uint16_t value)
         *p = (value >> 8) & 255;
 }
 
+#ifndef __LIBRETRO__
 bool utilWriteBMPFile(const char *fileName, int w, int h, uint8_t *pix)
 {
         uint8_t writeBuffer[512 * 3];
@@ -425,12 +426,11 @@ bool utilWriteBMPFile(const char *fileName, int w, int h, uint8_t *pix)
 
         return true;
 }
-
-extern bool cpuIsMultiBoot;
+#endif /* !__LIBRETRO__ */
 
 bool utilIsGBAImage(const char *file)
 {
-        cpuIsMultiBoot = false;
+        coreOptions.cpuIsMultiBoot = false;
         if (strlen(file) > 4) {
                 const char *p = strrchr(file, '.');
 
@@ -439,7 +439,7 @@ bool utilIsGBAImage(const char *file)
                             (_stricmp(p, ".bin") == 0) || (_stricmp(p, ".elf") == 0))
                                 return true;
                         if (_stricmp(p, ".mb") == 0) {
-                                cpuIsMultiBoot = true;
+                                coreOptions.cpuIsMultiBoot = true;
                                 return true;
                         }
                 }
@@ -868,7 +868,7 @@ void utilGBAFindSave(const int size)
         }
         rtcEnable(rtcFound);
         rtcEnableRumble(!rtcFound);
-        saveType = detectedSaveType;
+        coreOptions.saveType = detectedSaveType;
         flashSetSize(flashSize);
 }
 

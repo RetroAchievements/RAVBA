@@ -86,7 +86,7 @@ bool DirectSound::init(long sampleRate)
     hr = CoCreateInstance(CLSID_DirectSound8, NULL, CLSCTX_INPROC_SERVER, IID_IDirectSound8, (LPVOID*)&pDirectSound);
 
     if (hr != S_OK) {
-        wxLogError(_("Cannot create DirectSound %08x"), hr);
+        wxLogError(_("Cannot create Direct Sound %08x"), hr);
         return false;
     }
 
@@ -100,11 +100,11 @@ bool DirectSound::init(long sampleRate)
     pDirectSound->Initialize(&dev);
 
     if (hr != DS_OK) {
-        wxLogError(_("Cannot create DirectSound %08x"), hr);
+        wxLogError(_("Cannot create Direct Sound %08x"), hr);
         return false;
     }
 
-    if (FAILED(hr = pDirectSound->SetCooperativeLevel((HWND)wxGetApp().frame->GetHandle(), DSSCL_EXCLUSIVE))) {
+    if (FAILED(hr = pDirectSound->SetCooperativeLevel((HWND)wxGetApp().frame->GetHandle(), DSSCL_PRIORITY))) {
         wxLogError(_("Cannot SetCooperativeLevel %08x"), hr);
         return false;
     }
@@ -252,7 +252,7 @@ void DirectSound::write(uint16_t* finalWave, int length)
     LPVOID lpvPtr2;
     DWORD dwBytes2 = 0;
 
-    if (!speedup && throttle && !gba_joybus_active) {
+    if (!coreOptions.speedup && coreOptions.throttle && !gba_joybus_active) {
         hr = dsbSecondary->GetStatus(&status);
 
         if (status & DSBSTATUS_PLAYING) {

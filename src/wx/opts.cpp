@@ -1,8 +1,22 @@
-#include "wxvbam.h"
-#include <vector>
+#include "opts.h"
+
 #include <algorithm>
-#include <wx/display.h>
+#include <limits>
+#include <memory>
+#include <unordered_set>
+
+#include <wx/defs.h>
+#include <wx/filehistory.h>
+#include <wx/log.h>
+#include <wx/xrc/xmlres.h>
+
+#include "config/option-observer.h"
+#include "config/option-proxy.h"
+#include "config/option.h"
+#include "config/user-input.h"
 #include "strutils.h"
+#include "wxhead.h"
+#include "wxvbam.h"
 
 /*
        disableSfx(F) -> cpuDisableSfx
@@ -13,412 +27,242 @@
       -p/--profile=hz
 */
 
-#define WJKB newWxJoyKeyBinding
+namespace {
 
-/* not sure how well other compilers support field-init syntax */
-#define STROPT(c, n, d, v) \
-    new_opt_desc(wxT(c), (n), d, &v)
+void SaveOption(config::Option* option) {
+    wxConfigBase* cfg = wxConfigBase::Get();
 
-#define INTOPT(c, n, d, v, min, max) \
-    new_opt_desc(wxT(c), (n), d, NULL, &v, wxT(""), min, max)
-
-#define DOUBLEOPT(c, n, d, v, min, max) \
-    new_opt_desc(wxT(c), (n), d, NULL, NULL, wxT(""), min, max, NULL, &v)
-
-#define UINTOPT(c, n, d, v, min, max) \
-    new_opt_desc(wxT(c), (n), d, NULL, NULL, wxT(""), min, max, NULL, NULL, &v)
-
-#define BOOLOPT(c, n, d, v) \
-    new_opt_desc(wxT(c), (n), d, NULL, NULL, wxT(""), 0, 0, &v)
-
-#define ENUMOPT(c, n, d, v, e) \
-    new_opt_desc(wxT(c), (n), d, NULL, &v, e)
-
-#define NOOPT(c, n, d) \
-    new_opt_desc(c, (n), d)
-
-
-opts_t gopts;
-
-// having the standard menu accels here means they will work even without menus
-const wxAcceleratorEntryUnicode default_accels[] = {
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('C'), XRCID("CheatsList")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('N'), XRCID("NextFrame")),
-    // some ports add ctrl-q anyway, so may as well make it official
-    // maybe make alt-f4 universal as well...
-    // FIXME: ctrl-Q does not work on wxMSW
-    // FIXME: esc does not work on wxMSW
-
-    // this was annoying people A LOT #334
-    //wxAcceleratorEntry(wxMOD_NONE, WXK_ESCAPE, wxID_EXIT),
-
-    // this was annoying people #298
-    //wxAcceleratorEntry(wxMOD_CMD, wxT('X'), wxID_EXIT),
-
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('Q'), wxID_EXIT),
-    // FIXME: ctrl-W does not work on wxMSW
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('W'), wxID_CLOSE),
-    // load most recent is more commonly used than load other
-    //wxAcceleratorEntry(wxMOD_CMD, wxT('L'), XRCID("Load")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('L'), XRCID("LoadGameRecent")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F1, XRCID("LoadGame01")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F2, XRCID("LoadGame02")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F3, XRCID("LoadGame03")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F4, XRCID("LoadGame04")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F5, XRCID("LoadGame05")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F6, XRCID("LoadGame06")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F7, XRCID("LoadGame07")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F8, XRCID("LoadGame08")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F9, XRCID("LoadGame09")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_F10, XRCID("LoadGame10")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_PAUSE, XRCID("Pause")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('P'), XRCID("Pause")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('R'), XRCID("Reset")),
-    // add shortcuts for original size multiplier #415
-    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('1'), XRCID("SetSize1x")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('2'), XRCID("SetSize2x")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('3'), XRCID("SetSize3x")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('4'), XRCID("SetSize4x")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('5'), XRCID("SetSize5x")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, wxT('6'), XRCID("SetSize6x")),
-    // save oldest is more commonly used than save other
-    //wxAcceleratorEntry(wxMOD_CMD, wxT('S'), XRCID("Save")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('S'), XRCID("SaveGameOldest")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F1, XRCID("SaveGame01")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F2, XRCID("SaveGame02")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F3, XRCID("SaveGame03")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F4, XRCID("SaveGame04")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F5, XRCID("SaveGame05")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F6, XRCID("SaveGame06")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F7, XRCID("SaveGame07")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F8, XRCID("SaveGame08")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F9, XRCID("SaveGame09")),
-    wxAcceleratorEntryUnicode(wxMOD_SHIFT, WXK_F10, XRCID("SaveGame10")),
-    // I prefer the SDL ESC key binding
-    //wxAcceleratorEntry(wxMOD_NONE, WXK_ESCAPE, XRCID("ToggleFullscreen"),
-    // alt-enter is more standard anyway
-    wxAcceleratorEntryUnicode(wxMOD_ALT, WXK_RETURN, XRCID("ToggleFullscreen")),
-    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('1'), XRCID("JoypadAutofireA")),
-    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('2'), XRCID("JoypadAutofireB")),
-    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('3'), XRCID("JoypadAutofireL")),
-    wxAcceleratorEntryUnicode(wxMOD_ALT, wxT('4'), XRCID("JoypadAutofireR")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('1'), XRCID("VideoLayersBG0")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('2'), XRCID("VideoLayersBG1")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('3'), XRCID("VideoLayersBG2")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('4'), XRCID("VideoLayersBG3")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('5'), XRCID("VideoLayersOBJ")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('6'), XRCID("VideoLayersWIN0")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('7'), XRCID("VideoLayersWIN1")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('8'), XRCID("VideoLayersOBJWIN")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('B'), XRCID("Rewind")),
-    // following are not in standard menus
-    // FILExx are filled in when recent menu is filled
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F1, wxID_FILE1),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F2, wxID_FILE2),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F3, wxID_FILE3),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F4, wxID_FILE4),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F5, wxID_FILE5),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F6, wxID_FILE6),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F7, wxID_FILE7),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F8, wxID_FILE8),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F9, wxID_FILE9),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, WXK_F10, wxID_FILE10),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('0'), XRCID("VideoLayersReset")),
-    wxAcceleratorEntryUnicode(wxMOD_CMD, wxT('G'), XRCID("ChangeFilter")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_NUMPAD_ADD, XRCID("IncreaseVolume")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_NUMPAD_SUBTRACT, XRCID("DecreaseVolume")),
-    wxAcceleratorEntryUnicode(wxMOD_NONE, WXK_NUMPAD_ENTER, XRCID("ToggleSound"))
-};
-const int num_def_accels = sizeof(default_accels) / sizeof(default_accels[0]);
-
-// Note: this must match GUI widget names or GUI won't work
-// This table's order determines tab order as well
-const wxString joynames[NUM_KEYS] = {
-    wxT("Up"), wxT("Down"), wxT("Left"), wxT("Right"),
-    wxT("A"), wxT("B"), wxT("L"), wxT("R"),
-    wxT("Select"), wxT("Start"),
-    wxT("MotionUp"), wxT("MotionDown"), wxT("MotionLeft"), wxT("MotionRight"),
-    wxT("MotionIn"), wxT("MotionOut"), wxT("AutoA"), wxT("AutoB"),
-    wxT("Speed"), wxT("Capture"), wxT("GS")
-};
-
-wxJoyKeyBinding defkeys_keyboard[NUM_KEYS] = {
-    WJKB(wxT('W')), WJKB(wxT('S')), WJKB(wxT('A')), WJKB(wxT('D')),
-    WJKB(wxT('L')), WJKB(wxT('K')), WJKB(wxT('I')), WJKB(wxT('O')),
-    WJKB(WXK_BACK), WJKB(WXK_RETURN),
-    WJKB(0), WJKB(0), WJKB(0), WJKB(0),
-    WJKB(0), WJKB(0), WJKB(0), WJKB(0),
-    WJKB(WXK_SPACE), WJKB(0), WJKB(0)
-};
-
-std::vector<std::vector<wxJoyKeyBinding>> defkeys_joystick = {
-    { WJKB(11, WXJB_BUTTON, 1), WJKB(1, WXJB_AXIS_MINUS, 1), WJKB(3, WXJB_AXIS_MINUS, 1) },
-    { WJKB(12, WXJB_BUTTON, 1), WJKB(1, WXJB_AXIS_PLUS,  1), WJKB(3, WXJB_AXIS_PLUS,  1) },
-    { WJKB(13, WXJB_BUTTON, 1), WJKB(0, WXJB_AXIS_MINUS, 1), WJKB(2, WXJB_AXIS_MINUS, 1) },
-    { WJKB(14, WXJB_BUTTON, 1), WJKB(0, WXJB_AXIS_PLUS,  1), WJKB(2, WXJB_AXIS_PLUS,  1) },
-    { WJKB(0, WXJB_BUTTON, 1) },
-    { WJKB(1, WXJB_BUTTON, 1) },
-    { WJKB(2, WXJB_BUTTON, 1), WJKB( 9, WXJB_BUTTON, 1), WJKB(4, WXJB_AXIS_PLUS,  1) },
-    { WJKB(3, WXJB_BUTTON, 1), WJKB(10, WXJB_BUTTON, 1), WJKB(5, WXJB_AXIS_PLUS,  1) },
-    { WJKB(4, WXJB_BUTTON, 1) },
-    { WJKB(6, WXJB_BUTTON, 1) },
-    {}, {}, {}, {},
-    {}, {}, {}, {},
-    {}, {}, {}
-};
-
-wxAcceleratorEntry_v sys_accels;
-
-// Initializer for struct opt_desc
-opt_desc new_opt_desc(wxString opt, const char* cmd, wxString desc,
-                      wxString* stropt, int* intopt, wxString enumvals,
-                      double min, double max, bool* boolopt,
-                      double* doubleopt, uint32_t* uintopt, wxString curstr,
-                      int curint, double curdouble, uint32_t curuint)
-{
-    struct opt_desc new_opt = {opt, cmd, desc, stropt, intopt, enumvals,
-                               min, max, boolopt, doubleopt, uintopt,
-                               curstr, curint, curdouble, curuint};
-    return new_opt;
+    switch (option->type()) {
+        case config::Option::Type::kNone:
+            // Keyboard and Joypad are handled separately.
+            break;
+        case config::Option::Type::kBool:
+            cfg->Write(option->config_name(), option->GetBool());
+            break;
+        case config::Option::Type::kDouble:
+            cfg->Write(option->config_name(), option->GetDouble());
+            break;
+        case config::Option::Type::kInt:
+            cfg->Write(option->config_name(), option->GetInt());
+            break;
+        case config::Option::Type::kUnsigned:
+            cfg->Write(option->config_name(), option->GetUnsigned());
+            break;
+        case config::Option::Type::kString:
+            cfg->Write(option->config_name(), option->GetString());
+            break;
+        case config::Option::Type::kFilter:
+        case config::Option::Type::kInterframe:
+        case config::Option::Type::kRenderMethod:
+        case config::Option::Type::kAudioApi:
+        case config::Option::Type::kSoundQuality:
+            cfg->Write(option->config_name(), option->GetEnumString());
+            break;
+        case config::Option::Type::kGbPalette:
+            cfg->Write(option->config_name(), option->GetGbPaletteString());
+            break;
+    }
+    cfg->Flush();
 }
 
-// Note: this table must be sorted in option name order
-// Both for better user display and for (fast) searching by name
-opt_desc opts[] = {
-    /// Display
-    BOOLOPT("Display/Bilinear", "Bilinear", wxTRANSLATE("Use bilinear filter with 3d renderer"), gopts.bilinear),
-    ENUMOPT("Display/Filter", "", wxTRANSLATE("Full-screen filter to apply"), gopts.filter,
-        wxTRANSLATE("none|2xsai|super2xsai|supereagle|pixelate|advmame|"
-                    L"bilinear|bilinearplus|scanlines|tvmode|hq2x|lq2x|"
-                    L"simple2x|simple3x|hq3x|simple4x|hq4x|xbrz2x|xbrz3x|xbrz4x|xbrz5x|xbrz6x|plugin")),
-    STROPT("Display/FilterPlugin", "", wxTRANSLATE("Filter plugin library"), gopts.filter_plugin),
-    ENUMOPT("Display/IFB", "", wxTRANSLATE("Interframe blending function"), gopts.ifb, wxTRANSLATE("none|smart|motionblur")),
-    BOOLOPT("Display/KeepOnTop", "KeepOnTop", wxTRANSLATE("Keep window on top"), gopts.keep_on_top),
-    INTOPT("Display/MaxThreads", "Multithread", wxTRANSLATE("Maximum number of threads to run filters in"), gopts.max_threads, 1, 256),
-#ifdef __WXMSW__
-    ENUMOPT("Display/RenderMethod", "", wxTRANSLATE("Render method; if unsupported, simple method will be used"), gopts.render_method, wxTRANSLATE("simple|opengl|direct3d")),
-#elif defined(__WXMAC__)
-    ENUMOPT("Display/RenderMethod", "", wxTRANSLATE("Render method; if unsupported, simple method will be used"), gopts.render_method, wxTRANSLATE("simple|opengl|quartz2d")),
-#else
-    ENUMOPT("Display/RenderMethod", "", wxTRANSLATE("Render method; if unsupported, simple method will be used"), gopts.render_method, wxTRANSLATE("simple|opengl")),
-#endif
-    DOUBLEOPT("Display/Scale", "", wxTRANSLATE("Default scale factor"), gopts.video_scale, 1, 6),
-    BOOLOPT("Display/Stretch", "RetainAspect", wxTRANSLATE("Retain aspect ratio when resizing"), gopts.retain_aspect),
-
-    /// GB
-    STROPT("GB/BiosFile", "", wxTRANSLATE("BIOS file to use for GB, if enabled"), gopts.gb_bios),
-    INTOPT("GB/ColorOption", "GBColorOption", wxTRANSLATE("GB color enhancement, if enabled"), gbColorOption, 0, 1),
-    INTOPT("GB/ColorizerHack", "ColorizerHack", wxTRANSLATE("Enable DX Colorization Hacks"), colorizerHack, 0, 1),
-    BOOLOPT("GB/LCDFilter", "GBLcdFilter", wxTRANSLATE("Apply LCD filter, if enabled"), gbLcdFilter),
-    STROPT("GB/GBCBiosFile", "", wxTRANSLATE("BIOS file to use for GBC, if enabled"), gopts.gbc_bios),
-    NOOPT(wxT("GB/Palette0"), "", wxTRANSLATE("The default palette, as 8 comma-separated 4-digit hex integers (rgb555).")),
-    NOOPT(wxT("GB/Palette1"), "", wxTRANSLATE("The first user palette, as 8 comma-separated 4-digit hex integers (rgb555).")),
-    NOOPT(wxT("GB/Palette2"), "", wxTRANSLATE("The second user palette, as 8 comma-separated 4-digit hex integers (rgb555).")),
-    BOOLOPT("GB/PrintAutoPage", "PrintGather", wxTRANSLATE("Automatically gather a full page before printing"), gopts.print_auto_page),
-    BOOLOPT("GB/PrintScreenCap", "PrintSnap", wxTRANSLATE("Automatically save printouts as screen captures with -print suffix"), gopts.print_screen_cap),
-    STROPT("GB/ROMDir", "", wxTRANSLATE("Directory to look for ROM files"), gopts.gb_rom_dir),
-    STROPT("GB/GBCROMDir", "", wxTRANSLATE("Directory to look for GBC ROM files"), gopts.gbc_rom_dir),
-
-    /// GBA
-    STROPT("GBA/BiosFile", "", wxTRANSLATE("BIOS file to use, if enabled"), gopts.gba_bios),
-    BOOLOPT("GBA/LCDFilter", "GBALcdFilter", wxTRANSLATE("Apply LCD filter, if enabled"), gbaLcdFilter),
-#ifndef NO_LINK
-    BOOLOPT("GBA/LinkAuto", "LinkAuto", wxTRANSLATE("Enable link at boot"), gopts.link_auto),
-    INTOPT("GBA/LinkFast", "SpeedOn", wxTRANSLATE("Enable faster network protocol by default"), linkHacks, 0, 1),
-    STROPT("GBA/LinkHost", "", wxTRANSLATE("Default network link client host"), gopts.link_host),
-    STROPT("GBA/ServerIP", "", wxTRANSLATE("Default network link server IP to bind"), gopts.server_ip),
-    UINTOPT("GBA/LinkPort", "", wxTRANSLATE("Default network link port (server and client)"), gopts.link_port, 0, 65535),
-    INTOPT("GBA/LinkProto", "LinkProto", wxTRANSLATE("Default network protocol"), gopts.link_proto, 0, 1),
-    INTOPT("GBA/LinkTimeout", "LinkTimeout", wxTRANSLATE("Link timeout (ms)"), linkTimeout, 0, 9999999),
-    INTOPT("GBA/LinkType", "LinkType", wxTRANSLATE("Link cable type"), gopts.gba_link_type, 0, 5),
-#endif
-    STROPT("GBA/ROMDir", "", wxTRANSLATE("Directory to look for ROM files"), gopts.gba_rom_dir),
-
-    /// General
-    BOOLOPT("General/AutoLoadLastState", "", wxTRANSLATE("Automatically load last saved state"), gopts.autoload_state),
-    STROPT("General/BatteryDir", "", wxTRANSLATE("Directory to store game save files (relative paths are relative to ROM; blank is config dir)"), gopts.battery_dir),
-    BOOLOPT("General/FreezeRecent", "", wxTRANSLATE("Freeze recent load list"), gopts.recent_freeze),
-    STROPT("General/RecordingDir", "", wxTRANSLATE("Directory to store A/V and game recordings (relative paths are relative to ROM)"), gopts.recording_dir),
-    INTOPT("General/RewindInterval", "", wxTRANSLATE("Number of seconds between rewind snapshots (0 to disable)"), gopts.rewind_interval, 0, 600),
-    STROPT("General/ScreenshotDir", "", wxTRANSLATE("Directory to store screenshots (relative paths are relative to ROM)"), gopts.scrshot_dir),
-    STROPT("General/StateDir", "", wxTRANSLATE("Directory to store saved state files (relative paths are relative to BatteryDir)"), gopts.state_dir),
-    INTOPT("General/StatusBar", "StatusBar", wxTRANSLATE("Enable status bar"), gopts.statusbar, 0, 1),
-
-    /// Joypad
-    NOOPT(wxT("Joypad/*/*"), "", wxTRANSLATE("The parameter Joypad/<n>/<button> contains a comma-separated list of key names which map to joypad #<n> button <button>.  Button is one of Up, Down, Left, Right, A, B, L, R, Select, Start, MotionUp, MotionDown, MotionLeft, MotionRight, AutoA, AutoB, Speed, Capture, GS")),
-    INTOPT("Joypad/AutofireThrottle", "", wxTRANSLATE("The autofire toggle period, in frames (1/60 s)"), gopts.autofire_rate, 1, 1000),
-
-    /// Keyboard
-    INTOPT("Joypad/Default", "", wxTRANSLATE("The number of the stick to use in single-player mode"), gopts.default_stick, 1, 4),
-
-    /// Keyboard
-    NOOPT(wxT("Keyboard/*"), "", wxTRANSLATE("The parameter Keyboard/<cmd> contains a comma-separated list of key names (e.g. Alt-Shift-F1).  When the named key is pressed, the command <cmd> is executed.")),
-
-    // Core
-    INTOPT("preferences/agbPrint", "AGBPrinter", wxTRANSLATE("Enable AGB debug print"), agbPrint, 0, 1),
-    INTOPT("preferences/autoFrameSkip", "FrameSkipAuto", wxTRANSLATE("Auto skip frames."), autoFrameSkip, 0, 1),
-    INTOPT("preferences/autoPatch", "ApplyPatches", wxTRANSLATE("Apply IPS/UPS/IPF patches if found"), autoPatch, 0, 1),
-    BOOLOPT("preferences/autoSaveLoadCheatList", "", wxTRANSLATE("Automatically save and load cheat list"), gopts.autoload_cheats),
-    INTOPT("preferences/borderAutomatic", "", wxTRANSLATE("Automatically enable border for Super GameBoy games"), gbBorderAutomatic, 0, 1),
-    INTOPT("preferences/borderOn", "", wxTRANSLATE("Always enable border"), gbBorderOn, 0, 1),
-    INTOPT("preferences/captureFormat", "", wxTRANSLATE("Screen capture file format"), captureFormat, 0, 1),
-    INTOPT("preferences/cheatsEnabled", "", wxTRANSLATE("Enable cheats"), cheatsEnabled, 0, 1),
-
-#ifdef MMX
-    INTOPT("preferences/enableMMX", "MMX", wxTRANSLATE("Enable MMX"), enableMMX, 0, 1),
-#endif
-    INTOPT("preferences/disableStatus", "NoStatusMsg", wxTRANSLATE("Disable on-screen status messages"), disableStatusMessages, 0, 1),
-    INTOPT("preferences/emulatorType", "", wxTRANSLATE("Type of system to emulate"), gbEmulatorType, 0, 5),
-    INTOPT("preferences/flashSize", "", wxTRANSLATE("Flash size 0 = 64KB 1 = 128KB"), optFlashSize, 0, 1),
-    INTOPT("preferences/frameSkip", "FrameSkip", wxTRANSLATE("Skip frames.  Values are 0-9 or -1 to skip automatically based on time."), frameSkip, -1, 9),
-    INTOPT("preferences/fsColorDepth", "", wxTRANSLATE("Fullscreen mode color depth (0 = any)"), fsColorDepth, 0, 999),
-    INTOPT("preferences/fsFrequency", "", wxTRANSLATE("Fullscreen mode frequency (0 = any)"), fsFrequency, 0, 999),
-    INTOPT("preferences/fsHeight", "", wxTRANSLATE("Fullscreen mode height (0 = desktop)"), fsHeight, 0, 99999),
-    INTOPT("preferences/fsWidth", "", wxTRANSLATE("Fullscreen mode width (0 = desktop)"), fsWidth, 0, 99999),
-    INTOPT("preferences/gbPaletteOption", "", wxTRANSLATE("The palette to use"), gbPaletteOption, 0, 2),
-    INTOPT("preferences/gbPrinter", "Printer", wxTRANSLATE("Enable printer emulation"), winGbPrinterEnabled, 0, 1),
-    INTOPT("preferences/gdbBreakOnLoad", "DebugGDBBreakOnLoad", wxTRANSLATE("Break into GDB after loading the game."), gdbBreakOnLoad, 0, 1),
-    INTOPT("preferences/gdbPort", "DebugGDBPort", wxTRANSLATE("Port to connect GDB to."), gdbPort, 0, 65535),
-#ifndef NO_LINK
-    INTOPT("preferences/LinkNumPlayers", "", wxTRANSLATE("Number of players in network"), linkNumPlayers, 2, 4),
-#endif
-    INTOPT("preferences/maxScale", "", wxTRANSLATE("Maximum scale factor (0 = no limit)"), maxScale, 0, 100),
-    INTOPT("preferences/pauseWhenInactive", "PauseWhenInactive", wxTRANSLATE("Pause game when main window loses focus"), pauseWhenInactive, 0, 1),
-    INTOPT("preferences/rtcEnabled", "RTC", wxTRANSLATE("Enable RTC (vba-over.ini override is rtcEnabled"), rtcEnabled, 0, 1),
-    INTOPT("preferences/saveType", "", wxTRANSLATE("Native save (\"battery\") hardware type"), cpuSaveType, 0, 5),
-    INTOPT("preferences/showSpeed", "", wxTRANSLATE("Show speed indicator"), showSpeed, 0, 2),
-    INTOPT("preferences/showSpeedTransparent", "Transparent", wxTRANSLATE("Draw on-screen messages transparently"), showSpeedTransparent, 0, 1),
-    INTOPT("preferences/skipBios", "SkipIntro", wxTRANSLATE("Skip BIOS initialization"), skipBios, 0, 1),
-    INTOPT("preferences/skipSaveGameCheats", "", wxTRANSLATE("Do not overwrite cheat list when loading state"), skipSaveGameCheats, 0, 1),
-    INTOPT("preferences/skipSaveGameBattery", "", wxTRANSLATE("Do not overwrite native (battery) save when loading state"), skipSaveGameBattery, 0, 1),
-    UINTOPT("preferences/throttle", "", wxTRANSLATE("Throttle game speed, even when accelerated (0-450%, 0 = no throttle)"), throttle, 0, 450),
-    UINTOPT("preferences/speedupThrottle", "", wxTRANSLATE("Set throttle for speedup key (0-3000%, 0 = no throttle)"), speedup_throttle, 0, 3000),
-    UINTOPT("preferences/speedupFrameSkip", "", wxTRANSLATE("Number of frames to skip with speedup (instead of speedup throttle)"), speedup_frame_skip, 0, 300),
-    BOOLOPT("preferences/speedupThrottleFrameSkip", "", wxTRANSLATE("Use frame skip for speedup throttle"), speedup_throttle_frame_skip),
-    INTOPT("preferences/useBiosGB", "BootRomGB", wxTRANSLATE("Use the specified BIOS file for GB"), useBiosFileGB, 0, 1),
-    INTOPT("preferences/useBiosGBA", "BootRomEn", wxTRANSLATE("Use the specified BIOS file"), useBiosFileGBA, 0, 1),
-    INTOPT("preferences/useBiosGBC", "BootRomGBC", wxTRANSLATE("Use the specified BIOS file for GBC"), useBiosFileGBC, 0, 1),
-    INTOPT("preferences/vsync", "VSync", wxTRANSLATE("Wait for vertical sync"), vsync, 0, 1),
-
-    /// Geometry
-    INTOPT("geometry/fullScreen", "Fullscreen", wxTRANSLATE("Enter fullscreen mode at startup"), fullScreen, 0, 1),
-    INTOPT("geometry/isMaximized", "Maximized", wxTRANSLATE("Window maximized"), windowMaximized, 0, 1),
-    UINTOPT("geometry/windowHeight", "Height", wxTRANSLATE("Window height at startup"), windowHeight, 0, 99999),
-    UINTOPT("geometry/windowWidth", "Width", wxTRANSLATE("Window width at startup"), windowWidth, 0, 99999),
-    INTOPT("geometry/windowX", "X", wxTRANSLATE("Window axis X position at startup"), windowPositionX, -1, 99999),
-    INTOPT("geometry/windowY", "Y", wxTRANSLATE("Window axis Y position at startup"), windowPositionY, -1, 99999),
-
-    /// UI
-    BOOLOPT("ui/allowKeyboardBackgroundInput", "AllowKeyboardBackgroundInput", wxTRANSLATE("Capture key events while on background"), allowKeyboardBackgroundInput),
-    BOOLOPT("ui/allowJoystickBackgroundInput", "AllowJoystickBackgroundInput", wxTRANSLATE("Capture joy events while on background"), allowJoystickBackgroundInput),
-    BOOLOPT("ui/hideMenuBar", "", wxTRANSLATE("Hide menu bar when mouse is inactive"), gopts.hide_menu_bar),
-
-    /// Sound
-    ENUMOPT("Sound/AudioAPI", "", wxTRANSLATE("Sound API; if unsupported, default API will be used"), gopts.audio_api, wxTRANSLATE("sdl|openal|directsound|xaudio2|faudio")),
-    STROPT("Sound/AudioDevice", "", wxTRANSLATE("Device ID of chosen audio device for chosen driver"), gopts.audio_dev),
-    INTOPT("Sound/Buffers", "", wxTRANSLATE("Number of sound buffers"), gopts.audio_buffers, 2, 10),
-    INTOPT("Sound/Enable", "", wxTRANSLATE("Bit mask of sound channels to enable"), gopts.sound_en, 0, 0x30f),
-    INTOPT("Sound/GBAFiltering", "", wxTRANSLATE("GBA sound filtering (%)"), gopts.gba_sound_filter, 0, 100),
-    BOOLOPT("Sound/GBAInterpolation", "GBASoundInterpolation", wxTRANSLATE("GBA sound interpolation"), soundInterpolation),
-    BOOLOPT("Sound/GBDeclicking", "GBDeclicking", wxTRANSLATE("GB sound declicking"), gopts.gb_declick),
-    INTOPT("Sound/GBEcho", "", wxTRANSLATE("GB echo effect (%)"), gopts.gb_echo, 0, 100),
-    BOOLOPT("Sound/GBEnableEffects", "GBEnhanceSound", wxTRANSLATE("Enable GB sound effects"), gopts.gb_effects_config_enabled),
-    INTOPT("Sound/GBStereo", "", wxTRANSLATE("GB stereo effect (%)"), gopts.gb_stereo, 0, 100),
-    BOOLOPT("Sound/GBSurround", "GBSurround", wxTRANSLATE("GB surround sound effect (%)"), gopts.gb_effects_config_surround),
-    ENUMOPT("Sound/Quality", "", wxTRANSLATE("Sound sample rate (kHz)"), gopts.sound_qual, wxTRANSLATE("48|44|22|11")),
-    INTOPT("Sound/Volume", "", wxTRANSLATE("Sound volume (%)"), gopts.sound_vol, 0, 200)
-};
-const int num_opts = sizeof(opts) / sizeof(opts[0]);
-
-// This constructor only works with globally allocated gopts.  It relies on
-// the default value of every non-object to be 0.
-opts_t::opts_t()
-{
-    frameSkip = -1;
-    audio_api = AUD_SDL;
-#ifndef NO_OGL
-    render_method = RND_OPENGL;
-#endif
-
-    video_scale = 3;
-    retain_aspect = true;
-    max_threads = wxThread::GetCPUCount();
-
-    // handle erroneous thread count values appropriately
-    if (max_threads > 256)
-        max_threads = 256;
-
-    if (max_threads < 1)
-        max_threads = 1;
-
-    // 10 fixes stuttering on mac with openal, as opposed to 5
-    // also should be better for modern hardware in general
-    audio_buffers = 10;
-
-    sound_en = 0x30f;
-    sound_vol = 100;
-    sound_qual = 1;
-    gb_echo = 20;
-    gb_stereo = 15;
-    gb_declick = true;
-    gba_sound_filter = 50;
-    bilinear = true;
-    default_stick = 1;
-
-    recent = new wxFileHistory(10);
-    autofire_rate = 1;
-    print_auto_page = true;
-    autoPatch = true;
-    // quick fix for issues #48 and #445
-    link_host = "127.0.0.1";
-    server_ip = "*";
-    link_port = 5738;
-
-    hide_menu_bar = true;
-
-    skipSaveGameBattery = true;
-}
-
-// for binary_search() and friends
-bool opt_lt(const opt_desc& opt1, const opt_desc& opt2)
-{
-    return wxStrcmp(opt1.opt, opt2.opt) < 0;
-}
-
-// set default input keys
-void set_default_keys()
-{
-    for (int i = 0; i < NUM_KEYS; i++) {
-        gopts.joykey_bindings[0][i].clear();
-
-        if (defkeys_keyboard[i].key)
-            gopts.joykey_bindings[0][i].push_back(defkeys_keyboard[i]);
-        for (auto bind : defkeys_joystick[i])
-            gopts.joykey_bindings[0][i].push_back(bind);
+// Intitialize global observers to overwrite the configuration option when the
+// option has been modified.
+void InitializeOptionObservers() {
+    static std::unordered_set<std::unique_ptr<config::OptionsObserver>>
+        g_observers;
+    g_observers.reserve(config::kNbOptions);
+    for (config::Option& option : config::Option::All()) {
+        g_observers.emplace(std::make_unique<config::OptionsObserver>(
+            option.id(), &SaveOption));
     }
 }
 
-// FIXME: simulate MakeInstanceFilename(vbam.ini) using subkeys (Slave%d/*)
-void load_opts()
+// Helper function to work around wxWidgets limitations when converting string
+// to unsigned int.
+uint32_t LoadUnsignedOption(wxConfigBase* cfg,
+                            const wxString& option_name,
+                            uint32_t default_value) {
+    wxString temp;
+    if (!cfg->Read(option_name, &temp)) {
+        return default_value;
+    }
+    if (!temp.IsNumber()) {
+        return default_value;
+    }
+
+    // Go through ulonglong to get enough space to work with. Also, older
+    // versions do not have a conversion function for unsigned int.
+    wxULongLong_t out;
+    if (!temp.ToULongLong(&out)) {
+        return default_value;
+    }
+
+    if (out > std::numeric_limits<uint32_t>::max()) {
+        return default_value;
+    }
+
+    return out;
+}
+
+}  // namespace
+
+#define WJKB config::UserInput
+
+opts_t gopts;
+
+const std::map<config::GameControl, std::set<config::UserInput>> kDefaultBindings = {
+    { config::GameControl(0, config::GameKey::Up), {
+        WJKB('W'),
+        WJKB(11, wxJoyControl::Button, 1),
+        WJKB(1, wxJoyControl::AxisMinus, 1),
+        WJKB(3, wxJoyControl::AxisMinus, 1),
+    }},
+    { config::GameControl(0, config::GameKey::Down), {
+        WJKB('S'),
+        WJKB(12, wxJoyControl::Button, 1),
+        WJKB(1, wxJoyControl::AxisPlus, 1),
+        WJKB(3, wxJoyControl::AxisPlus, 1),
+    }},
+    { config::GameControl(0, config::GameKey::Left), {
+        WJKB('A'),
+        WJKB(13, wxJoyControl::Button, 1),
+        WJKB(0, wxJoyControl::AxisMinus, 1),
+        WJKB(2, wxJoyControl::AxisMinus, 1),
+    }},
+    { config::GameControl(0, config::GameKey::Right), {
+        WJKB('D'),
+        WJKB(14, wxJoyControl::Button, 1),
+        WJKB(0, wxJoyControl::AxisPlus, 1),
+        WJKB(2, wxJoyControl::AxisPlus, 1),
+    }},
+    { config::GameControl(0, config::GameKey::A), {
+        WJKB('L'),
+        WJKB(0, wxJoyControl::Button, 1),
+    }},
+    { config::GameControl(0, config::GameKey::B), {
+        WJKB('K'),
+        WJKB(1, wxJoyControl::Button, 1),
+    }},
+    { config::GameControl(0, config::GameKey::L), {
+        WJKB('I'),
+        WJKB(2, wxJoyControl::Button, 1),
+        WJKB(9, wxJoyControl::Button, 1),
+        WJKB(4, wxJoyControl::AxisPlus, 1),
+    }},
+    { config::GameControl(0, config::GameKey::R), {
+        WJKB('O'),
+        WJKB(3, wxJoyControl::Button, 1),
+        WJKB(10, wxJoyControl::Button, 1),
+        WJKB(5, wxJoyControl::AxisPlus, 1),
+    }},
+    { config::GameControl(0, config::GameKey::Select), {
+        WJKB(WXK_BACK),
+        WJKB(4, wxJoyControl::Button, 1),
+    }},
+    { config::GameControl(0, config::GameKey::Start), {
+        WJKB(WXK_RETURN),
+        WJKB(6, wxJoyControl::Button, 1),
+    }},
+    { config::GameControl(0, config::GameKey::MotionUp), {}},
+    { config::GameControl(0, config::GameKey::MotionDown), {}},
+    { config::GameControl(0, config::GameKey::MotionLeft), {}},
+    { config::GameControl(0, config::GameKey::MotionRight), {}},
+    { config::GameControl(0, config::GameKey::MotionIn), {}},
+    { config::GameControl(0, config::GameKey::MotionOut), {}},
+    { config::GameControl(0, config::GameKey::AutoA), {}},
+    { config::GameControl(0, config::GameKey::AutoB), {}},
+    { config::GameControl(0, config::GameKey::Speed), {
+            WJKB(WXK_SPACE),
+    }},
+    { config::GameControl(0, config::GameKey::Capture), {}},
+    { config::GameControl(0, config::GameKey::Gameshark), {}},
+
+    { config::GameControl(1, config::GameKey::Up), {}},
+    { config::GameControl(1, config::GameKey::Down), {}},
+    { config::GameControl(1, config::GameKey::Left), {}},
+    { config::GameControl(1, config::GameKey::Right), {}},
+    { config::GameControl(1, config::GameKey::A), {}},
+    { config::GameControl(1, config::GameKey::B), {}},
+    { config::GameControl(1, config::GameKey::L), {}},
+    { config::GameControl(1, config::GameKey::R), {}},
+    { config::GameControl(1, config::GameKey::Select), {}},
+    { config::GameControl(1, config::GameKey::Start), {}},
+    { config::GameControl(1, config::GameKey::MotionUp), {}},
+    { config::GameControl(1, config::GameKey::MotionDown), {}},
+    { config::GameControl(1, config::GameKey::MotionLeft), {}},
+    { config::GameControl(1, config::GameKey::MotionRight), {}},
+    { config::GameControl(1, config::GameKey::MotionIn), {}},
+    { config::GameControl(1, config::GameKey::MotionOut), {}},
+    { config::GameControl(1, config::GameKey::AutoA), {}},
+    { config::GameControl(1, config::GameKey::AutoB), {}},
+    { config::GameControl(1, config::GameKey::Speed), {}},
+    { config::GameControl(1, config::GameKey::Capture), {}},
+    { config::GameControl(1, config::GameKey::Gameshark), {}},
+
+    { config::GameControl(2, config::GameKey::Up), {}},
+    { config::GameControl(2, config::GameKey::Down), {}},
+    { config::GameControl(2, config::GameKey::Left), {}},
+    { config::GameControl(2, config::GameKey::Right), {}},
+    { config::GameControl(2, config::GameKey::A), {}},
+    { config::GameControl(2, config::GameKey::B), {}},
+    { config::GameControl(2, config::GameKey::L), {}},
+    { config::GameControl(2, config::GameKey::R), {}},
+    { config::GameControl(2, config::GameKey::Select), {}},
+    { config::GameControl(2, config::GameKey::Start), {}},
+    { config::GameControl(2, config::GameKey::MotionUp), {}},
+    { config::GameControl(2, config::GameKey::MotionDown), {}},
+    { config::GameControl(2, config::GameKey::MotionLeft), {}},
+    { config::GameControl(2, config::GameKey::MotionRight), {}},
+    { config::GameControl(2, config::GameKey::MotionIn), {}},
+    { config::GameControl(2, config::GameKey::MotionOut), {}},
+    { config::GameControl(2, config::GameKey::AutoA), {}},
+    { config::GameControl(2, config::GameKey::AutoB), {}},
+    { config::GameControl(2, config::GameKey::Speed), {}},
+    { config::GameControl(2, config::GameKey::Capture), {}},
+    { config::GameControl(2, config::GameKey::Gameshark), {}},
+
+    { config::GameControl(3, config::GameKey::Up), {}},
+    { config::GameControl(3, config::GameKey::Down), {}},
+    { config::GameControl(3, config::GameKey::Left), {}},
+    { config::GameControl(3, config::GameKey::Right), {}},
+    { config::GameControl(3, config::GameKey::A), {}},
+    { config::GameControl(3, config::GameKey::B), {}},
+    { config::GameControl(3, config::GameKey::L), {}},
+    { config::GameControl(3, config::GameKey::R), {}},
+    { config::GameControl(3, config::GameKey::Select), {}},
+    { config::GameControl(3, config::GameKey::Start), {}},
+    { config::GameControl(3, config::GameKey::MotionUp), {}},
+    { config::GameControl(3, config::GameKey::MotionDown), {}},
+    { config::GameControl(3, config::GameKey::MotionLeft), {}},
+    { config::GameControl(3, config::GameKey::MotionRight), {}},
+    { config::GameControl(3, config::GameKey::MotionIn), {}},
+    { config::GameControl(3, config::GameKey::MotionOut), {}},
+    { config::GameControl(3, config::GameKey::AutoA), {}},
+    { config::GameControl(3, config::GameKey::AutoB), {}},
+    { config::GameControl(3, config::GameKey::Speed), {}},
+    { config::GameControl(3, config::GameKey::Capture), {}},
+    { config::GameControl(3, config::GameKey::Gameshark), {}},
+};
+
+// This constructor only works with globally allocated gopts.
+opts_t::opts_t()
 {
+    recent = new wxFileHistory(10);
+}
+
+// FIXME: simulate MakeInstanceFilename(vbam.ini) using subkeys (Slave%d/*)
+void load_opts(bool first_time_launch) {
     // just for sanity...
-    bool did_init = false;
-
-    if (did_init)
-        return;
-
+    static bool did_init = false;
+    assert(!did_init);
     did_init = true;
-
-    // Translations can't be initialized in static structures (before locale
-    // is initialized), so do them now
-    for (int i = 0; i < num_opts; i++)
-        opts[i].desc = wxGetTranslation(opts[i].desc);
 
     // enumvals should not be translated, since they would cause config file
     // change after lang change
     // instead, translate when presented to user
-    wxFileConfig* cfg = wxGetApp().cfg;
-    cfg->SetPath(wxT("/"));
+    wxConfigBase* cfg = wxConfigBase::Get();
+    cfg->SetPath("/");
+
     // enure there are no unknown options present
     // note that items cannot be deleted until after loop or loop will fail
     wxArrayString item_del, grp_del;
@@ -432,10 +276,22 @@ void load_opts()
         item_del.push_back(s);
     }
 
-    // Date of last online update check;
-    gopts.last_update = cfg->Read(wxT("General/LastUpdated"), (long)0);
-    cfg->Read(wxT("General/LastUpdatedFileName"), &gopts.last_updated_filename);
-    std::sort(&opts[0], &opts[num_opts], opt_lt);
+    // Read the IniVersion now since the Option initialization code will reset
+    // it to kIniLatestVersion if it is unset.
+    uint32_t ini_version = 0;
+    if (first_time_launch) {
+        // Just go with the default values for the first time launch.
+        ini_version = config::kIniLatestVersion;
+    } else {
+        // We want to default to 0 if the option is not set.
+        ini_version = LoadUnsignedOption(cfg, "General/IniVersion", 0);
+        if (ini_version > config::kIniLatestVersion) {
+            wxLogWarning(
+                _("The INI file was written for a more recent version of "
+                  "VBA-M. Some INI option values may have been reset."));
+            ini_version = config::kIniLatestVersion;
+        }
+    }
 
     for (cont = cfg->GetFirstGroup(s, grp_idx); cont;
          cont = cfg->GetNextGroup(s, grp_idx)) {
@@ -473,13 +329,7 @@ void load_opts()
 
                 for (cont = cfg->GetFirstEntry(e, key_idx); cont;
                      cont = cfg->GetNextEntry(e, key_idx)) {
-                    int i;
-
-                    for (i = 0; i < NUM_KEYS; i++)
-                        if (e == joynames[i])
-                            break;
-
-                    if (i == NUM_KEYS) {
+                    if (!config::StringToGameKey(e)) {
                         s.append(e);
                         //wxLogWarning(_("Invalid option %s present; removing if possible"), s.c_str());
                         item_del.push_back(s);
@@ -515,14 +365,11 @@ void load_opts()
             } else {
                 s.append(wxT('/'));
                 s.append(e);
-                opt_desc dummy = new_opt_desc(s);
-                wxString opt_name(dummy.opt);
-
-                if (!std::binary_search(&opts[0], &opts[num_opts], dummy, opt_lt) && opt_name != wxT("General/LastUpdated") && opt_name != wxT("General/LastUpdatedFileName")) {
+                if (!config::Option::ByName(s) && s != "General/LastUpdated" &&
+                    s != "General/LastUpdatedFileName") {
                     //wxLogWarning(_("Invalid option %s present; removing if possible"), s.c_str());
                     item_del.push_back(s);
                 }
-
                 s.resize(poff);
             }
         }
@@ -540,127 +387,78 @@ void load_opts()
     // config file will be updated with unset options
     cfg->SetRecordDefaults();
 
-    for (int i = 0; i < num_opts; i++) {
-        opt_desc& opt = opts[i];
-
-        if (opt.stropt) {
-            //Fix provided by nhdailey
-            cfg->Read(opt.opt, opt.stropt, *opt.stropt);
-            opt.curstr = *opt.stropt;
-        } else if (!opt.enumvals.empty()) {
-            auto enum_opts = str_split(opt.enumvals.MakeLower(), wxT("|"));
-            opt.curint     = *opt.intopt;
-            bool gotit     = cfg->Read(opt.opt, &s); s.MakeLower();
-
-            if (gotit && !s.empty()) {
-                const auto found_pos = vec_find(enum_opts, s);
-                const bool matched   = ((int)found_pos != wxNOT_FOUND);
-
-                if (!matched) {
-                    opt.curint = 0;
-                    const wxString ev  = opt.enumvals;
-                    const wxString evx = wxGetTranslation(ev);
-                    bool isx = wxStrcmp(ev, evx) != 0;
-                    // technically, the translation for this string could incorproate
-                    // the equals sign if necessary instead of doing it this way
-                    wxLogWarning(_("Invalid value %s for option %s; valid values are %s%s%s"),
-                        s.c_str(), opt.opt.c_str(), ev.c_str(),
-                        isx ? wxT(" = ") : wxEmptyString,
-                        isx ? evx.c_str() : wxEmptyString);
-                    // write first option
-                    cfg->Write(opt.opt, enum_opts[0]);
-                } else
-                    opt.curint = found_pos;
-
-                *opt.intopt = opt.curint;
-            } else {
-                cfg->Write(opt.opt, enum_opts[opt.curint]);
+    // First access here will also initialize translations.
+    for (config::Option& opt : config::Option::All()) {
+        switch (opt.type()) {
+        case config::Option::Type::kNone:
+            // Keyboard or Joystick. Handled separately for now.
+            break;
+        case config::Option::Type::kBool: {
+            bool temp;
+            cfg->Read(opt.config_name(), &temp, opt.GetBool());
+            opt.SetBool(temp);
+            break;
+        }
+        case config::Option::Type::kDouble: {
+            double temp;
+            cfg->Read(opt.config_name(), &temp, opt.GetDouble());
+            opt.SetDouble(temp);
+            break;
+        }
+        case config::Option::Type::kInt: {
+            int32_t temp;
+            cfg->Read(opt.config_name(), &temp, opt.GetInt());
+            opt.SetInt(temp);
+            break;
+        }
+        case config::Option::Type::kUnsigned: {
+            uint32_t temp =
+                LoadUnsignedOption(cfg, opt.config_name(), opt.GetUnsigned());
+            opt.SetUnsigned(temp);
+            break;
+        }
+        case config::Option::Type::kString: {
+            wxString temp;
+            cfg->Read(opt.config_name(),  &temp, opt.GetString());
+            opt.SetString(temp);
+            break;
+        }
+        case config::Option::Type::kFilter:
+        case config::Option::Type::kInterframe:
+        case config::Option::Type::kRenderMethod:
+        case config::Option::Type::kAudioApi:
+        case config::Option::Type::kSoundQuality: {
+            wxString temp;
+            if (cfg->Read(opt.config_name(), &temp) && !temp.empty()) {
+                opt.SetEnumString(temp.MakeLower());
             }
-        } else if (opt.intopt) {
-            cfg->Read(opt.opt, &opt.curint, *opt.intopt);
-
-            if (opt.curint < opt.min || opt.curint > opt.max) {
-                wxLogWarning(_("Invalid value %d for option %s; valid values are %d - %d"), opt.curint, opt.opt.c_str(), int(opt.min), int(opt.max));
-            } else
-                *opt.intopt = opt.curint;
-        } else if (opt.doubleopt) {
-            cfg->Read(opt.opt, &opt.curdouble, *opt.doubleopt);
-
-            if (opt.curdouble < opt.min || opt.curdouble > opt.max) {
-                wxLogWarning(_("Invalid value %f for option %s; valid values are %f - %f"), opt.curdouble, opt.opt.c_str(), opt.min, opt.max);
-            } else
-                *opt.doubleopt = opt.curdouble;
-        } else if (opt.uintopt) {
-            int val;
-            cfg->Read(opt.opt, &val, *opt.uintopt);
-            opt.curuint = val;
-
-            if (opt.curuint < opt.min || opt.curuint > opt.max) {
-                wxLogWarning(_("Invalid value %f for option %s; valid values are %f - %f"), opt.curuint, opt.opt.c_str(), opt.min, opt.max);
-            } else
-                *opt.uintopt = opt.curuint;
-        } else if (opt.boolopt) {
-            cfg->Read(opt.opt, opt.boolopt, *opt.boolopt);
-            opt.curbool = *opt.boolopt;
+            // This is necessary, in case the option we loaded was invalid.
+            cfg->Write(opt.config_name(), opt.GetEnumString());
+            break;
+        }
+        case config::Option::Type::kGbPalette: {
+            wxString temp;
+            cfg->Read(opt.config_name(), &temp, opt.GetGbPaletteString());
+            opt.SetGbPaletteString(temp);
+            break;
+        }
         }
     }
 
-    // GB/Palette[0-2] is special
-    for (int i = 0; i < 3; i++) {
-        wxString optn;
-        optn.Printf(wxT("GB/Palette%d"), i);
-        wxString val;
-        const opt_desc dummy = new_opt_desc(optn);
-        opt_desc* opt = std::lower_bound(&opts[0], &opts[num_opts], dummy, opt_lt);
-        wxString entry;
-
-        for (int j = 0; j < 8; j++) {
-            // stupid wxString.Printf doesn't support printing at offset
-            entry.Printf(wxT("%04X,"), (int)systemGbPalette[i * 8 + j]);
-            val.append(entry);
-        }
-
-        val.resize(val.size() - 1);
-        cfg->Read(optn, &val, val);
-        opt->curstr = val;
-
-        for (int j = 0, cpos = 0; j < 8; j++) {
-            int start = cpos;
-            cpos = val.find(wxT(','), cpos);
-
-            if ((size_t)cpos == wxString::npos)
-                cpos = val.size();
-
-            long ival;
-            // ignoring errors; if the value is bad, palette will be corrupt
-            // -- tough.
-            // stupid wxString.ToLong doesn't support start @ offset
-            entry = val.substr(start, cpos - start);
-            entry.ToLong(&ival, 16);
-            systemGbPalette[i * 8 + j] = ival;
-
-            if ((size_t)cpos != val.size())
-                cpos++;
-        }
-    }
+    // Initialize game control bindings to populate the configuration map.
+    gopts.game_control_bindings.insert(kDefaultBindings.begin(), kDefaultBindings.end());
 
     // joypad is special
-    set_default_keys();
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < NUM_KEYS; j++) {
-            wxString optname;
-            optname.Printf(wxT("Joypad/%d/%s"), i + 1, joynames[j].c_str());
-            bool gotit = cfg->Read(optname, &s);
-
-            if (gotit) {
-                gopts.joykey_bindings[i][j] = wxJoyKeyTextCtrl::FromString(s);
-
-                if (s.size() && !gopts.joykey_bindings[i][j].size())
-                    wxLogWarning(_("Invalid key binding %s for %s"), s.c_str(), optname.c_str());
-            } else {
-                s = wxJoyKeyTextCtrl::ToString(gopts.joykey_bindings[i][j]);
-                cfg->Write(optname, s);
+    for (auto& iter : gopts.game_control_bindings) {
+        const wxString optname = iter.first.ToString();
+        if (cfg->Read(optname, &s)) {
+            iter.second = config::UserInput::FromConfigString(s);
+            if (!s.empty() && iter.second.empty()) {
+                wxLogWarning(_("Invalid key binding %s for %s"), s.c_str(), optname.c_str());
             }
+        } else {
+            s = config::UserInput::SpanToConfigString(iter.second);
+            cfg->Write(optname, s);
         }
     }
 
@@ -674,22 +472,16 @@ void load_opts()
         kbopt.append(cmdtab[i].cmd);
 
         if (cfg->Read(kbopt, &s) && s.size()) {
-            wxAcceleratorEntry_v val = wxJoyKeyTextCtrl::ToAccelFromString(s);
-
-            if (!val.size())
+            auto inputs = config::UserInput::FromConfigString(s);
+            if (inputs.empty()) {
                 wxLogWarning(_("Invalid key binding %s for %s"), s.c_str(), kbopt.c_str());
-            else {
-                for (size_t j = 0; j < val.size(); j++)
-                    val[j].Set(val[j].GetUkey(), val[j].GetJoystick(), val[j].GetFlags(), val[j].GetKeyCode(), cmdtab[i].cmd_id);
-
-                gopts.accels.insert(gopts.accels.end(), val.begin(), val.end());
+            } else {
+                for (const auto& input : inputs) {
+                    gopts.shortcuts.AssignInputToCommand(input, cmdtab[i].cmd_id);
+                }
             }
         }
     }
-
-    // Make sure linkTimeout is not set to 1, which was the previous default.
-    if (linkTimeout <= 1)
-        linkTimeout = 500;
 
     // recent is special
     // Recent does not get written with defaults
@@ -697,304 +489,200 @@ void load_opts()
     gopts.recent->Load(*cfg);
     cfg->SetPath(wxT("/"));
     cfg->Flush();
+
+    InitializeOptionObservers();
+
+    // We default the MaxThreads option to 0, so set it to the CPU count here.
+    config::OptionProxy<config::OptionID::kDispMaxThreads> max_threads;
+    if (max_threads == 0) {
+        // Handle erroneous thread count values appropriately.
+        const int cpu_count = wxThread::GetCPUCount();
+        if (cpu_count > 256) {
+            max_threads = 256;
+        } else if (cpu_count < 1) {
+            max_threads = 1;
+        } else {
+            max_threads = cpu_count;
+        }
+    }
+
+    // Apply Option updates.
+    while (ini_version < config::kIniLatestVersion) {
+        // Update the ini version as we go in case we fail halfway through.
+        OPTION(kGenIniVersion) = ini_version;
+        switch (ini_version) {
+            case 0: { // up to 2.1.5 included.
+#ifndef NO_LINK
+                // Previous default was 1.
+                if (OPTION(kGBALinkTimeout) == 1) {
+                    OPTION(kGBALinkTimeout) = 500;
+                }
+#endif
+                // Previous default was true.
+                OPTION(kGBALCDFilter) = false;
+            }
+        }
+        ini_version++;
+    }
+
+    // Finally, overwrite the value to the current version.
+    OPTION(kGenIniVersion) = config::kIniLatestVersion;
 }
 
 // Note: run load_opts() first to guarantee all config opts exist
-void update_opts()
-{
-    wxFileConfig* cfg = wxGetApp().cfg;
+void update_opts() {
+    for (config::Option& opt : config::Option::All()) {
+        SaveOption(&opt);
+    }
+}
 
-    for (int i = 0; i < num_opts; i++) {
-        opt_desc& opt = opts[i];
+void update_joypad_opts() {
+    wxConfigBase* cfg = wxConfigBase::Get();
 
-        if (opt.stropt) {
-            if (opt.curstr != *opt.stropt) {
-                opt.curstr = *opt.stropt;
-                cfg->Write(opt.opt, opt.curstr);
-            }
-        } else if (!opt.enumvals.empty()) {
-            if (*opt.intopt != opt.curint) {
-                opt.curint = *opt.intopt;
-                auto enum_opts = str_split(opt.enumvals.MakeLower(), wxT("|"));
-
-                cfg->Write(opt.opt, enum_opts[opt.curint]);
-            }
-        } else if (opt.intopt) {
-            if (*opt.intopt != opt.curint)
-                cfg->Write(opt.opt, (opt.curint = *opt.intopt));
-        } else if (opt.doubleopt) {
-            if (*opt.doubleopt != opt.curdouble)
-                cfg->Write(opt.opt, (opt.curdouble = *opt.doubleopt));
-        } else if (opt.uintopt) {
-            if (*opt.uintopt != opt.curuint)
-                cfg->Write(opt.opt, (long)(opt.curuint = *opt.uintopt));
-        } else if (opt.boolopt) {
-            if (*opt.boolopt != opt.curbool)
-                cfg->Write(opt.opt, (opt.curbool = *opt.boolopt));
+    // For joypad, compare the UserInput sets. Since UserInput guarantees a
+    // certain ordering, it is possible that the user control in the panel shows
+    // a different ordering than the one that will be eventually saved, but this
+    // is nothing to worry about.
+    bool game_bindings_changed = false;
+    for (const auto &iter : gopts.game_control_bindings) {
+        wxString option_name = iter.first.ToString();
+        std::set<config::UserInput> saved_config =
+            config::UserInput::FromConfigString(cfg->Read(option_name, ""));
+        if (saved_config != iter.second) {
+            game_bindings_changed = true;
+            cfg->Write(option_name, config::UserInput::SpanToConfigString(iter.second));
         }
     }
 
-    // gbpalette requires doing the conversion to string over
-    // it may trigger a write even with no changes if # of digits changes
-    for (int i = 0; i < 3; i++) {
-        wxString optn;
-        optn.Printf(wxT("GB/Palette%d"), i);
-        const opt_desc dummy = new_opt_desc(optn);
-        opt_desc* opt = std::lower_bound(&opts[0], &opts[num_opts], dummy, opt_lt);
-        wxString val;
-        wxString entry;
-
-        for (int j = 0; j < 8; j++) {
-            // stupid wxString.Printf doesn't support printing at offset
-            entry.Printf(wxT("%04X,"), (int)systemGbPalette[i * 8 + j]);
-            val.append(entry);
-        }
-
-        val.resize(val.size() - 1);
-
-        if (val != opt->curstr) {
-            opt->curstr = val;
-            cfg->Write(optn, val);
-        }
+    if (game_bindings_changed) {
+        config::GameControlState::Instance().OnGameBindingsChanged();
     }
 
-    // for joypad, use ToString comparisons.  It may trigger changes
-    // even when there are none (e.g. multi-binding ordering changes)
-    // not worth worrying about
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < NUM_KEYS; j++) {
-            wxString s, o;
-            wxString optname;
-            optname.Printf(wxT("Joypad/%d/%s"), i + 1, joynames[j].c_str());
-            s = wxJoyKeyTextCtrl::ToString(gopts.joykey_bindings[i][j], wxT(','), true);
-            cfg->Read(optname, &o);
-
-            if (o != s)
-                cfg->Write(optname, s);
-        }
-    }
-
-    // for keyboard, first remove any commands that aren't bound at all
-    if (cfg->HasGroup(wxT("/Keyboard"))) {
-        cfg->SetPath(wxT("/Keyboard"));
-        wxString s;
-        long entry_idx;
-        wxArrayString item_del;
-
-        for (bool cont = cfg->GetFirstEntry(s, entry_idx); cont;
-             cont = cfg->GetNextEntry(s, entry_idx)) {
-            const cmditem dummy = new_cmditem(s);
-            cmditem* cmd = std::lower_bound(&cmdtab[0], &cmdtab[ncmds], dummy, cmditem_lt);
-            size_t i;
-
-            for (i = 0; i < gopts.accels.size(); i++)
-                if (gopts.accels[i].GetCommand() == cmd->cmd_id)
-                    break;
-
-            if (i == gopts.accels.size())
-                item_del.push_back(s);
-        }
-
-        for (size_t i = 0; i < item_del.size(); i++)
-            cfg->DeleteEntry(item_del[i]);
-    }
-
-    // then, add/update the commands that are bound
-    // even if only ordering changed, a write will be triggered.
-    // nothing to worry about...
-    if (gopts.accels.size())
-        cfg->SetPath(wxT("/Keyboard"));
-
-    int cmd_id = -1;
-    for (wxAcceleratorEntry_v::iterator i = gopts.accels.begin();
-         i < gopts.accels.end(); ++i) {
-        if (cmd_id == i->GetCommand()) continue;
-        cmd_id = i->GetCommand();
-        int cmd;
-
-        for (cmd = 0; cmd < ncmds; cmd++)
-            if (cmdtab[cmd].cmd_id == cmd_id)
-                break;
-
-        // NOOP overwrittes commands removed by the user
-        wxString command = cmdtab[cmd].cmd;
-        if (cmdtab[cmd].cmd_id == XRCID("NOOP"))
-            command = wxT("NOOP");
-
-        wxAcceleratorEntry_v::iterator j;
-
-        for (j = i + 1; j < gopts.accels.end(); ++j)
-            if (j->GetCommand() != cmd_id)
-                break;
-
-        wxAcceleratorEntry_v nv(i, j);
-        wxString nvs = wxJoyKeyTextCtrl::FromAccelToString(nv, wxT(','), true);
-
-        if (nvs != cfg->Read(command))
-            cfg->Write(command, nvs);
-    }
-
-    cfg->SetPath(wxT("/"));
-    // recent items are updated separately
+    cfg->SetPath("/");
     cfg->Flush();
 }
 
-bool opt_set(const wxString& name, const wxString& val)
-{
-    const opt_desc dummy = new_opt_desc(name);
-    const opt_desc* opt = std::lower_bound(&opts[0], &opts[num_opts], dummy, opt_lt);
+void update_shortcut_opts() {
+    wxConfigBase* cfg = wxConfigBase::Get();
 
-    if (!wxStrcmp(name, opt->opt)) {
-        if (opt->stropt)
-            *opt->stropt = wxString(val);
-        else if (opt->boolopt) {
-            if (!(val == wxT('0') || val == wxT('1')))
-                wxLogWarning(_("Invalid flag option %s - %s ignored"),
+    // For shortcuts, it's easier to delete everything and start over.
+    cfg->DeleteGroup("/Keyboard");
+    cfg->SetPath("/Keyboard");
+    for (const auto& iter : gopts.shortcuts.GetConfiguration()) {
+        int cmd = 0;
+        for (cmd = 0; cmd < ncmds; cmd++)
+            if (cmdtab[cmd].cmd_id == iter.first)
+                break;
+        if (cmd == ncmds) {
+            // Command not found. This should never happen.
+            assert(false);
+            continue;
+        }
+
+        cfg->Write(cmdtab[cmd].cmd, iter.second);
+    }
+
+    cfg->SetPath("/");
+    cfg->Flush();
+}
+
+void opt_set(const wxString& name, const wxString& val) {
+    config::Option* opt = config::Option::ByName(name);
+
+    // opt->is_none() means it is Keyboard or Joypad.
+    if (opt && !opt->is_none()) {
+        switch (opt->type()) {
+        case config::Option::Type::kNone:
+            // This should never happen.
+            assert(false);
+            return;
+        case config::Option::Type::kBool:
+            if (val != '0' && val != '1') {
+                wxLogWarning(_("Invalid value %s for option %s"),
                     name.c_str(), val.c_str());
-            else
-                *opt->boolopt = val == wxT('1');
-        } else if (!opt->enumvals.empty()) {
-            wxString s     = val; s.MakeLower();
-            wxString ev    = opt->enumvals; ev.MakeLower();
-            auto enum_opts = str_split(ev, wxT("|"));
-
-            const std::size_t found_pos = vec_find(enum_opts, s);
-            const bool matched          = ((int)found_pos != wxNOT_FOUND);
-
-            if (!matched) {
-                const wxString evx = wxGetTranslation(opt->enumvals);
-                bool isx = wxStrcmp(opt->enumvals, evx) != 0;
-                // technically, the translation for this string could incorproate
-                // the equals sign if necessary instead of doing it this way
-                wxLogWarning(_("Invalid value %s for option %s; valid values are %s%s%s"),
-                    s.c_str(), opt->opt.c_str(), opt->enumvals.c_str(),
-                    isx ? wxT(" = ") : wxEmptyString,
-                    isx ? evx.c_str() : wxEmptyString);
-            } else {
-                *opt->intopt = found_pos;
+                return;
             }
-        } else if (opt->intopt) {
-            const wxString s(val);
-            long ival;
+            opt->SetBool(val == '1');
+            return;
+        case config::Option::Type::kDouble: {
+            double value;
+            if (!val.ToDouble(&value)) {
+                wxLogWarning(_("Invalid value %s for option %s"), val, name.c_str());
+                return;
+            }
+            opt->SetDouble(value);
+            return;
+        }
+        case config::Option::Type::kInt: {
+            long value;
+            if (!val.ToLong(&value)) {
+                wxLogWarning(_("Invalid value %s for option %s"), val, name.c_str());
+                return;
+            }
+            opt->SetInt(static_cast<int32_t>(value));
+            return;
+        }
+        case config::Option::Type::kUnsigned: {
+            unsigned long value;
+            if (!val.ToULong(&value)) {
+                wxLogWarning(_("Invalid value %s for option %s"), val, name.c_str());
+                return;
+            }
+            opt->SetUnsigned(static_cast<uint32_t>(value));
+            return;
+        }
+        case config::Option::Type::kString:
+            opt->SetString(val);
+            return;
+        case config::Option::Type::kFilter:
+        case config::Option::Type::kInterframe:
+        case config::Option::Type::kRenderMethod:
+        case config::Option::Type::kAudioApi:
+        case config::Option::Type::kSoundQuality:
+            opt->SetEnumString(val);
+            return;
+        case config::Option::Type::kGbPalette:
+            opt->SetGbPaletteString(val);
+            return;
+        }
+    }
 
-            if (!s.ToLong(&ival) || ival < opt->min || ival > opt->max)
-                wxLogWarning(_("Invalid value %d for option %s; valid values are %d - %d"), ival, name.c_str(), opt->min, opt->max);
-            else
-                *opt->intopt = ival;
-        } else if (opt->doubleopt) {
-            const wxString s(val);
-            double dval;
+    if (name.Find(wxT('/')) == wxNOT_FOUND) {
+        return;
+    }
 
-            if (!s.ToDouble(&dval) || dval < opt->min || dval > opt->max)
-                wxLogWarning(_("Invalid value %f for option %s; valid values are %f - %f"), dval, name.c_str(), opt->min, opt->max);
-            else
-                *opt->doubleopt = dval;
-        } else if (opt->uintopt) {
-            const wxString s(val);
-            unsigned long uival;
+    auto parts = strutils::split(name, wxT("/"));
+    if (parts[0] == wxT("Keyboard")) {
+        cmditem* cmd = std::lower_bound(&cmdtab[0], &cmdtab[ncmds], cmditem{parts[1],wxString(),0,0,NULL}, cmditem_lt);
 
-            if (!s.ToULong(&uival) || uival < opt->min || uival > opt->max)
-                wxLogWarning(_("Invalid value %f for option %s; valid values are %f - %f"), uival, name.c_str(), opt->min, opt->max);
-            else
-                *opt->uintopt = (uint32_t)uival;
-        } else {
-            // GB/Palette[0-2] is virtual
-            for (int i = 0; i < 3; i++) {
-                wxString optn;
-                optn.Printf(wxT("GB/Palette%d"), i);
+        if (cmd == &cmdtab[ncmds] || wxStrcmp(parts[1], cmd->cmd)) {
+            return;
+        }
 
-                if (optn != name)
-                    continue;
-
-                wxString vals(val);
-
-                for (size_t j = 0, cpos = 0; j < 8; j++) {
-                    int start = cpos;
-                    cpos = vals.find(wxT(','), cpos);
-
-                    if (cpos == wxString::npos)
-                        cpos = vals.size();
-
-                    long ival;
-                    // ignoring errors; if the value is bad, palette will be corrupt
-                    // -- tough.
-                    // stupid wxString.ToLong doesn't support start @ offset
-                    wxString entry = vals.substr(start, cpos - start);
-                    entry.ToLong(&ival, 16);
-                    systemGbPalette[i * 8 + j] = ival;
-
-                    if (cpos != vals.size())
-                        cpos++;
-                }
+        if (!val.empty()) {
+            const auto inputs = config::UserInput::FromConfigString(val);
+            if (inputs.empty()) {
+                wxLogWarning(_("Invalid key binding %s for %s"), val.c_str(), name.c_str());
+            }
+            for (const auto& input : inputs) {
+                gopts.shortcuts.AssignInputToCommand(input, cmd->cmd_id);
             }
         }
 
-        return true;
-    } else {
-        if (name.Find(wxT('/')) == wxNOT_FOUND)
-            return false;
-
-        auto parts = str_split(name, wxT("/"));
-
-        if (parts[0] != wxT("Keyboard")) {
-            cmditem* cmd = std::lower_bound(&cmdtab[0], &cmdtab[ncmds], cmditem{parts[1],wxString(),0,0,NULL}, cmditem_lt);
-
-            if (cmd == &cmdtab[ncmds] || wxStrcmp(parts[1], cmd->cmd))
-                return false;
-
-            for (auto i = gopts.accels.begin(); i < gopts.accels.end(); ++i)
-                if (i->GetCommand() == cmd->cmd_id) {
-                    auto j = i;
-
-                    for (; j < gopts.accels.end(); ++j)
-                        if (j->GetCommand() != cmd->cmd_id)
-                            break;
-
-                    gopts.accels.erase(i, j);
-
-                    break;
-                }
-
-            if (!val.empty()) {
-                auto aval = wxJoyKeyTextCtrl::ToAccelFromString(val);
-
-                for (size_t i = 0; i < aval.size(); i++)
-                    aval[i].Set(aval[i].GetUkey(), aval[i].GetJoystick(), aval[i].GetFlags(), aval[i].GetKeyCode(), cmd->cmd_id);
-
-                if (!aval.size())
-                    wxLogWarning(_("Invalid key binding %s for %s"), val.c_str(), name.c_str());
-                else
-                    gopts.accels.insert(gopts.accels.end(), aval.begin(), aval.end());
-            }
-
-            return true;
-        } else if (!wxStrncmp(name, wxT("Joypad"), wxStrlen(wxT("Joypad")))) {
-            if (parts[1] < wxT('1') || parts[1] > wxT('4') || parts.size() < 3)
-                return false;
-
-            int jno = parts[1][0] - wxT('1');
-            int kno;
-
-            for (kno = 0; kno < NUM_KEYS; kno++)
-                if (!wxStrcmp(joynames[kno], parts[2]))
-                    break;
-
-            if (kno == NUM_KEYS)
-                return false;
-
-            if (val.empty())
-                gopts.joykey_bindings[jno][kno].clear();
-            else {
-                auto b = wxJoyKeyTextCtrl::FromString(val);
-
-                if (!b.size())
-                    wxLogWarning(_("Invalid key binding %s for %s"), val.c_str(), name.c_str());
-                else
-                    gopts.joykey_bindings[jno][kno] = b;
-            }
-
-            return true;
-        } else
-            return false;
+        return;
     }
+
+    const nonstd::optional<config::GameControl> game_control =
+        config::GameControl::FromString(name);
+    if (game_control) {
+        if (val.empty()) {
+            gopts.game_control_bindings[game_control.value()].clear();
+        } else {
+            gopts.game_control_bindings[game_control.value()] =
+                config::UserInput::FromConfigString(val);
+        }
+        return;
+    }
+
+    wxLogWarning(_("Unknown option %s with value %s"), name.c_str(), val.c_str());
 }

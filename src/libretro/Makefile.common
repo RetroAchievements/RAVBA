@@ -1,6 +1,7 @@
 LIBRETRO_COMMON := $(CORE_DIR)/libretro/libretro-common
 INCFLAGS        := -I$(CORE_DIR) -I$(LIBRETRO_COMMON)/include
 VBA_DEFINES     := -D__LIBRETRO__ -DFINAL_VERSION -DC_CORE -DNO_DEBUGGER
+VBA_DEFINES		+= -DNO_PNG
 
 ifeq ($(TILED_RENDERING), 1)
 VBA_DEFINES += -DTILED_RENDERING
@@ -52,6 +53,7 @@ SOURCES_CXX += \
 	$(CORE_DIR)/gba/Sram.cpp
 
 SOURCES_CXX += \
+	$(CORE_DIR)/gb/gbCartData.cpp \
 	$(CORE_DIR)/gb/gbCheats.cpp \
 	$(CORE_DIR)/gb/GB.cpp \
 	$(CORE_DIR)/gb/gbGfx.cpp \

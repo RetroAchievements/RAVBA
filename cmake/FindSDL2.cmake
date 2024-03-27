@@ -102,23 +102,41 @@ FIND_PATH(SDL2_INCLUDE_DIR SDL.h
 SET(CURRENT_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
 
 if(SDL2_STATIC)
-    if(WIN32)
-	set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a)
+    if(MSVC)
+	set(CMAKE_FIND_LIBRARY_SUFFIXES .lib)
     else()
 	set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
     endif()
 endif()
 
-unset(lib_suffix)
-if(MSVC AND CMAKE_BUILD_TYPE MATCHES Debug)
-    set(lib_suffix d)
+unset(lib_suffixes)
+if(MSVC)
+    if(VCPKG_TARGET_TRIPLET MATCHES "-static$")
+	list(APPEND lib_suffixes -static)
+    endif()
+
+    if(CMAKE_BUILD_TYPE MATCHES "^(Debug|RelWithDebInfo)$")
+	list(APPEND lib_suffixes d)
+    endif()
 endif()
 
+# Calculate combination of possible name+suffixes.
+unset(names)
+set(lib_name SDL2)
+set(current ${lib_name})
+foreach(suffix ${lib_suffixes})
+    list(APPEND names "${current}${suffix}" "${lib_name}${suffix}")
+    set(current "${current}${suffix}")
+endforeach()
+
+# Fallback to name by itself.
+list(APPEND names ${lib_name})
+
 FIND_LIBRARY(SDL2_LIBRARY_TEMP
-	NAMES SDL2${lib_suffix}
-	HINTS $ENV{SDL2DIR}
-	PATH_SUFFIXES lib64 lib lib/x64 lib/x86
-	PATHS ${SDL2_SEARCH_PATHS}
+    NAMES ${names}
+    HINTS $ENV{SDL2DIR}
+    PATH_SUFFIXES lib64 lib lib/x64 lib/x86
+    PATHS ${SDL2_SEARCH_PATHS}
 )
 
 if(NOT (SDL2_BUILDING_LIBRARY OR ${SDL2_INCLUDE_DIR} MATCHES ".framework"))
@@ -151,7 +169,7 @@ ENDIF(NOT APPLE)
 IF(MINGW)
 	SET(MINGW32_LIBRARY -lmingw32 CACHE STRING "MinGW library")
 
-        IF(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+	if(NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|RelWithDebInfo)$")
             SET(MINGW32_LIBRARY ${MINGW32_LIBRARY} -mwindows)
         ENDIF()
 ENDIF(MINGW)
@@ -183,6 +201,25 @@ IF(SDL2_LIBRARY_TEMP)
 	IF(MINGW)
 		SET(SDL2_LIBRARY_TEMP ${MINGW32_LIBRARY} ${SDL2_LIBRARY_TEMP} -lversion -limm32)
 	ENDIF(MINGW)
+
+	# Add libsamplerate with vcpkg
+	if(CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg")
+	    if(WIN32)
+		unset(arch_suffix)
+		unset(path_prefix)
+		if(VCPKG_TARGET_TRIPLET MATCHES -static)
+		    set(arch_suffix  -static)
+		endif()
+		if(CMAKE_BUILD_TYPE MATCHES "^(Debug|RelWithDebInfo)$")
+		    set(path_prefix debug)
+		endif()
+		set(installed_prefix ${_VCPKG_INSTALLED_DIR}/${WINARCH}-windows${arch_suffix}/${path_prefix})
+
+		SET(SDL2_LIBRARY_TEMP ${SDL2_LIBRARY_TEMP} ${installed_prefix}/lib/samplerate.lib)
+	    else()
+		SET(SDL2_LIBRARY_TEMP ${SDL2_LIBRARY_TEMP} -lsamplerate)
+	    endif()
+	endif()
 
         # Add some stuff from pkg-config, if available
         IF(NOT PKG_CONFIG_EXECUTABLE)

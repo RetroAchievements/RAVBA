@@ -46,7 +46,6 @@
 #include "SDL.h"
 
 #include "../Util.h"
-#include "../common/ConfigManager.h"
 #include "../common/Patch.h"
 #include "../gb/gb.h"
 #include "../gb/gbCheats.h"
@@ -60,6 +59,8 @@
 #include "../gba/agbprint.h"
 
 #include "../common/SoundSDL.h"
+
+#include "ConfigManager.h"
 #include "filters.h"
 #include "inputSDL.h"
 #include "text.h"
@@ -109,6 +110,8 @@ extern void remoteOutput(const char*, uint32_t);
 extern void remoteSetProtocol(int);
 extern void remoteSetPort(int);
 
+struct CoreOptions coreOptions;
+
 struct EmulatedSystem emulator = {
     NULL,
     NULL,
@@ -139,13 +142,31 @@ int systemGreenShift = 0;
 int systemColorDepth = 0;
 int systemVerbose = 0;
 int systemFrameSkip = 0;
+int frameskipadjust = 0;
 int systemSaveUpdateCounter = SYSTEM_SAVE_NOT_UPDATED;
+int renderedFrames = 0;
+int showRenderedFrames = 0;
+int mouseCounter = 0;
+uint32_t autoFrameSkipLastTime = 0;
+
+char* rewindMemory = NULL;
+int rewindCount;
+int rewindCounter;
+int rewindPos;
+int rewindSaveNeeded = 0;
+int rewindTopPos;
+int* rewindSerials = NULL;
 
 int srcPitch = 0;
 int destWidth = 0;
 int destHeight = 0;
 int desktopWidth = 0;
 int desktopHeight = 0;
+int sizeX = 240;
+int sizeY = 160;
+
+FilterFunc filterFunction = 0;
+IFBFilterFunc ifbFunction = 0;
 
 uint8_t* delta = NULL;
 static const int delta_size = 322 * 242 * 4;
@@ -207,6 +228,8 @@ enum VIDEO_SIZE {
 
 uint32_t throttleLastTime = 0;
 
+bool paused = false;
+bool wasPaused = false;
 bool pauseNextFrame = false;
 int sdlMirroringEnable = 1;
 
@@ -219,6 +242,7 @@ char* home;
 char homeConfigDir[1024];
 char homeDataDir[1024];
 
+bool screenMessage = false;
 char screenMessageBuffer[21];
 uint32_t screenMessageTime = 0;
 
@@ -595,9 +619,9 @@ static void sdlApplyPerImagePreferences()
             } else if (!strcmp(token, "saveType")) {
                 int save = atoi(value);
                 if (save >= 0 && save <= 5)
-                    cpuSaveType = save;
+                    coreOptions.cpuSaveType = save;
             } else if (!strcmp(token, "mirroringEnabled")) {
-                mirroringEnable = (atoi(value) == 0 ? false : true);
+                coreOptions.mirroringEnable = (atoi(value) == 0 ? false : true);
             }
         }
     }
@@ -1023,7 +1047,7 @@ void sdlPollEvents()
                 if (pauseWhenInactive)
                     if (paused) {
                         if (emulating) {
-                            paused = 0;
+                            paused = false;
                             soundResume();
                         }
                     }
@@ -1032,7 +1056,7 @@ void sdlPollEvents()
                 if (pauseWhenInactive) {
                     wasPaused = true;
                     if (emulating) {
-                        paused = 1;
+                        paused = true;
                         soundPause();
                     }
 
@@ -1089,8 +1113,8 @@ void sdlPollEvents()
                 break;
             case SDLK_e:
                 if (!(event.key.keysym.mod & MOD_NOCTRL) && (event.key.keysym.mod & KMOD_CTRL)) {
-                    cheatsEnabled = !cheatsEnabled;
-                    systemConsoleMessage(cheatsEnabled ? "Cheats on" : "Cheats off");
+                    coreOptions.cheatsEnabled = !coreOptions.cheatsEnabled;
+                    systemConsoleMessage(coreOptions.cheatsEnabled ? "Cheats on" : "Cheats off");
                 }
                 break;
 
@@ -1270,8 +1294,8 @@ void sdlPollEvents()
                     }
                 } else if (!(event.key.keysym.mod & MOD_NOCTRL) && (event.key.keysym.mod & KMOD_CTRL)) {
                     int mask = 0x0100 << (event.key.keysym.sym - SDLK_1);
-                    layerSettings ^= mask;
-                    layerEnable = DISPCNT & layerSettings;
+                    coreOptions.layerSettings ^= mask;
+                    coreOptions.layerEnable = DISPCNT & coreOptions.layerSettings;
                     CPUUpdateRenderBuffers(false);
                 }
                 break;
@@ -1281,8 +1305,8 @@ void sdlPollEvents()
             case SDLK_8:
                 if (!(event.key.keysym.mod & MOD_NOCTRL) && (event.key.keysym.mod & KMOD_CTRL)) {
                     int mask = 0x0100 << (event.key.keysym.sym - SDLK_1);
-                    layerSettings ^= mask;
-                    layerEnable = DISPCNT & layerSettings;
+                    coreOptions.layerSettings ^= mask;
+                    coreOptions.layerEnable = DISPCNT & coreOptions.layerSettings;
                 }
                 break;
             case SDLK_n:
@@ -1538,9 +1562,9 @@ int main(int argc, char** argv)
     SetHomeDataDir();
 
     frameSkip = 2;
-    gbBorderOn = 0;
+    gbBorderOn = false;
 
-    parseDebug = true;
+    coreOptions.parseDebug = true;
 
     gb_effects_config.stereo = 0.0;
     gb_effects_config.echo = 0.0;
@@ -1548,6 +1572,14 @@ int main(int argc, char** argv)
     gb_effects_config.enabled = false;
 
     LoadConfig(); // Parse command line arguments (overrides ini)
+
+    // Additional configuration.
+	if (rewindTimer) {
+		rewindMemory = (char *)malloc(REWIND_NUM*REWIND_SIZE);
+		rewindSerials = (int *)calloc(REWIND_NUM, sizeof(int)); // init to zeroes
+	}
+
+
     ReadOpts(argc, argv);
 
     inputSetKeymap(PAD_1, KEY_LEFT, ReadPrefHex("Joy0_Left"));
@@ -1689,19 +1721,13 @@ int main(int argc, char** argv)
 
                 // used for the handling of the gb Boot Rom
                 if (gbHardware & 7)
-                    gbCPUInit(biosFileNameGB, useBios);
+                    gbCPUInit(biosFileNameGB, coreOptions.useBios);
 
                 cartridgeType = IMAGE_GB;
                 emulator = GBSystem;
-                int size = gbRomSize, patchnum;
-                for (patchnum = 0; patchnum < patchNum; patchnum++) {
+                for (int patchnum = 0; patchnum < patchNum; patchnum++) {
                     fprintf(stdout, "Trying patch %s%s\n", patchNames[patchnum],
-                        applyPatch(patchNames[patchnum], &gbRom, &size) ? " [success]" : "");
-                }
-                if (size != gbRomSize) {
-                    extern bool gbUpdateSizes();
-                    gbUpdateSizes();
-                    gbReset();
+                        gbApplyPatch(patchNames[patchnum]) ? " [success]" : "");
                 }
                 gbReset();
             }
@@ -1709,19 +1735,19 @@ int main(int argc, char** argv)
             int size = CPULoadRom(szFile);
             failed = (size == 0);
             if (!failed) {
-                if (cpuSaveType == 0)
+                if (coreOptions.cpuSaveType == 0)
                     utilGBAFindSave(size);
                 else
-                    saveType = cpuSaveType;
+                    coreOptions.saveType = coreOptions.cpuSaveType;
 
                 sdlApplyPerImagePreferences();
 
-                doMirroring(mirroringEnable);
+                doMirroring(coreOptions.mirroringEnable);
 
                 cartridgeType = 0;
                 emulator = GBASystem;
 
-                CPUInit(biosFileNameGBA, useBios);
+                CPUInit(biosFileNameGBA, coreOptions.useBios);
                 int patchnum;
                 for (patchnum = 0; patchnum < patchNum; patchnum++) {
                     fprintf(stdout, "Trying patch %s%s\n", patchNames[patchnum],
@@ -1751,7 +1777,7 @@ int main(int argc, char** argv)
 
         emulator = GBASystem;
 
-        CPUInit(biosFileNameGBA, useBios);
+        CPUInit(biosFileNameGBA, coreOptions.useBios);
         CPUReset();
     }
 
@@ -1858,7 +1884,7 @@ int main(int argc, char** argv)
     }
 
     while (emulating) {
-        if (!paused && active) {
+        if (!paused) {
             if (debugger && emulator.emuHasDebugger)
                 remoteStubMain();
             else {
@@ -2060,7 +2086,7 @@ void systemFrame()
 {
 }
 
-void system10Frames(int rate)
+void system10Frames()
 {
     uint32_t time = systemGetClock();
     if (!wasPaused && autoFrameSkip) {
@@ -2068,7 +2094,7 @@ void system10Frames(int rate)
         int speed = 100;
 
         if (diff)
-            speed = (1000000 / rate) / diff;
+            speed = (1000000 / 60) / diff;
 
         if (speed >= 98) {
             frameskipadjust++;

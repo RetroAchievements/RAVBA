@@ -7,7 +7,6 @@
 #include "../NLS.h"
 #include "../System.h"
 #include "../Util.h"
-#include "../common/ConfigManager.h"
 #include "Cheats.h"
 #include "EEprom.h"
 #include "Flash.h"
@@ -1529,7 +1528,7 @@ static INSN_REGPARM void arm121(uint32_t opcode)
 #define ADDRESS_PREDEC (reg[base].I - offset)
 #define ADDRESS_PREINC (reg[base].I + offset)
 
-#define OP_STR CPUWriteMemory(address, reg[dest].I)
+#define OP_STR CPUWriteMemory(address, reg[dest].I + (dest == 15 ? 4 : 0))
 #define OP_STRH CPUWriteHalfWord(address, reg[dest].W.W0)
 #define OP_STRB CPUWriteByte(address, reg[dest].B.B0)
 #define OP_LDR reg[dest].I = CPUReadMemory(address)
@@ -2830,7 +2829,7 @@ static void tester(void) {
 int armExecute()
 {
     do {
-        if (cheatsEnabled) {
+        if (coreOptions.cheatsEnabled) {
             cpuMasterCodeCheck();
         }
 

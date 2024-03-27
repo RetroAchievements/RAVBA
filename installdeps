@@ -81,23 +81,16 @@ quit() {
 usage() {
     cat <<'EOF'
 Usage: [32m./installdeps [1;35m[TARGET][0m
-Try to install the dependencies needed for this project appropriately on the
-host OS.
+
+Try to install the dependencies needed for this project appropriately on the host OS.
 
 This program may require [1;35msudo[0m.
 
-A cross-compile target may be specified as the only parameter, of either
-[1;35mm32[0m which targets the host in 32 bit mode (e.g. x86 on an amd64
-host) or [1;35mwin32[0m, [1;35mMinGW-w64-i686[0m or
-[1;35mMinGW-w64-x86_64[0m.  [1;35mwin32[0m is an alias for
-[1;35mMinGW-w64-i686[0m to target Windows via MinGW.  Cross compiling for
-Windows is only supported on Debian/Ubuntu, Fedora, Arch Linux and MSYS2.
+A cross-compile target may be specified as the only parameter, of either [1;35mm32[0m which targets the host in 32 bit mode (e.g. x86 on an amd64 host) or [1;35mwin32[0m, [1;35mMinGW-w64-i686[0m or [1;35mMinGW-w64-x86_64[0m.  [1;35mwin32[0m is an alias for [1;35mMinGW-w64-i686[0m to target Windows via MinGW.  Cross compiling for Windows is only supported on Debian/Ubuntu, Fedora, Arch Linux and MSYS2.
 
-On MSYS2 dependencies are installed for 32 or 64 bit native Windows targets
-based on which shell you started (the value of $MSYSTEM) unless you specify one
-or the other. You can specify a cross target of [1;35mm32[0m or
-[1;35mm64[0m as aliases for the 32 bit or 64 bit targets respectively.
-MSYS2 POSIX layer builds are not supported.
+On MSYS2 the [1;35mMinGW-w64-clang-x86_64[0m target for CLANG64 and the [1;35mMinGW-w64-clang-i686[0m target for CLANG32 are also supported, as well as [1;35mMinGW-w64-ucrt-x86_64[0m for UCRT64.
+
+On MSYS2 dependencies are installed for 32 or 64 bit native Windows targets based on which shell you started (the value of $MSYSTEM) unless you specify one or the other. You can specify a cross target of [1;35mm32[0m or [1;35mm64[0m as aliases for the 32 bit or 64 bit MinGW gcc targets respectively. MSYS2 POSIX layer builds are not supported.
 
   [1m-h, --help, --usage[0m                Show this help screen and exit.
   [1m--no-openal[0m                        Do not install OpenAL dependencies.
@@ -186,6 +179,9 @@ linux_installdeps() {
             nixos)
                 nixos_installdeps
                 ;;
+            alpine)
+                alpine_installdeps
+                ;;
             *)
                 error "Don't know how to install deps on your version of Linux"
                 ;;
@@ -254,6 +250,15 @@ check_cross() {
                 MINGW64)
                     target='mingw-w64-x86_64'
                     ;;
+                CLANG32)
+                    target='mingw-w64-clang-i686'
+                    ;;
+                CLANG64)
+                    target='mingw-w64-clang-x86_64'
+                    ;;
+                UCRT64)
+                    target='mingw-w64-ucrt-x86_64'
+                    ;;
                 MSYS)
                     error 'host builds in MSYS mode are not supported, supply a target or start a MINGW shell'
                     ;;
@@ -279,12 +284,10 @@ check_cross() {
                 win64)
                     target='mingw-w64-x86_64'
                     ;;
-                mingw-w64-i686)
-                    ;;
-                mingw-w64-x86_64)
+                mingw-w64-x86_64|mingw-w64-i686|mingw-w64-clang-x86_64|mingw-w64-ucrt-x86_64|mingw-w64-clang-i686)
                     ;;
                 *)
-                    error "target must be one of 'm32', 'win32', 'MinGW-w64-i686', 'win64' or 'MinGW-w64-x86_64'"
+                    error "target must be one of 'm32', 'win32', 'win64', or one of the MinGW/clang/ucrt targets supported by MSYS2: mingw-w64-[clang|ucrt]-(x86_64|i686)."
                     ;;
             esac
             ;;
@@ -320,25 +323,39 @@ debian_installdeps() {
     if [ -z "$target" ]; then
         sudo apt-get -qq -y update
 
-        sfml_libs=$(apt-cache search libsfml | grep -E 'graphics|window|network' | sed 's/ - .*//')
+        sfml_libs=
 
-        glew_lib=$(apt-cache search libglew | grep '^libglew[0-9]' | sed 's/ - .*//')
+        for lib in graphics window network; do
+            sfml_libs="$sfml_libs $(apt-cache search "libsfml-$lib" | sed 's/ - .*//' | sort -r | head -1)"
+        done
+
+        glew_lib=$(apt-cache search libglew | grep '^libglew[0-9]' | sed 's/ - .*//' | sort -r | head -1)
+
+        sdl_lib=$(apt-cache search '^libsdl2-2.0' | sed 's/ - .*//' | sort -r | head -1)
 
         # not present in trusty
         if [ -n "$ENABLE_FFMPEG" ]; then
             libswresample_dev=$(apt-cache search libswresample-dev | awk '{print $1}')
         fi
 
-        # in newer distros
-        wx_lib=$(apt-cache search 'libwxgtk3.0-gtk3(-[^[:space:]]+)?$' | grep -v -- -dev | sed 's/ - .*//')
-        wx_lib_dev=$(apt-cache search 'libwxgtk3.0-gtk3-dev(-[^[:space:]]+)?$' | sed 's/ - .*//')
+        wx_libs=$(apt-cache search 'libwxgtk[0-9]' | sed 's/ - .*//')
 
-        if [ -z "$wx_lib" ] || [ -z "$wx_lib_dev" ]; then
-          wx_lib=libwxgtk3.0
-          wx_lib_dev=libwxgtk3.0-dev
-        fi
+        # Use -gtk3 variant on older distros.
+        case "$wx_libs" in
+            *-gtk3*)
+                new_wx_libs=
+                for pkg in $wx_libs; do
+                    case "$pkg" in
+                        *-gtk3*)
+                            new_wx_libs="$new_wx_libs $pkg"
+                            ;;
+                    esac
+                done
+                wx_libs=$new_wx_libs
+                ;;
+        esac
 
-        pkgs="build-essential g++ nasm cmake ccache gettext zlib1g-dev libgl1-mesa-dev libgettextpo-dev libsdl2-dev libsdl2-2.0 libglu1-mesa-dev libglu1-mesa libgles2-mesa-dev libsfml-dev $sfml_libs $glew_lib $wx_lib $wx_lib_dev libgtk2.0-dev libgtk-3-dev ccache zip ninja-build"
+        pkgs="build-essential g++ nasm cmake ccache gettext zlib1g-dev libgl1-mesa-dev libgettextpo-dev libsdl2-dev $sdl_lib libglu1-mesa-dev libglu1-mesa libgles2-mesa-dev libsfml-dev $sfml_libs $glew_lib $wx_libs libgtk2.0-dev libgtk-3-dev ccache zip ninja-build"
 
         [ -n "$ENABLE_OPENAL" ] && pkgs="$pkgs libopenal-dev"
         [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs libavcodec-dev libavformat-dev libswscale-dev libavutil-dev $libswresample_dev"
@@ -488,7 +505,7 @@ fedora_installdeps() {
             # this is sometimes necessary for rawhide
             set -- --exclude='glibc32*'
         fi
-        for pkg in zlib-devel mesa-libGL-devel ffmpeg-devel gettext-devel SDL2-devel SFML-devel openal-soft-devel wxGTK3-devel gtk3-devel; do
+        for pkg in zlib-devel mesa-libGL-devel ffmpeg-devel gettext-devel SDL2-devel SFML-devel openal-soft-devel wxGTK-devel gtk3-devel; do
             case $pkg in
                 *ffmpeg*)
                     [ -z "$ENABLE_FFMPEG" ] && continue
@@ -498,15 +515,23 @@ fedora_installdeps() {
                     ;;
             esac
 
+            pkg_arch=
             if [ -n "$amd64" ]; then
+                pkg_arch=.x86_64
+
                 if [ "$target" = m32 ]; then
-                    set -- "$@" "${pkg}.i686"
-                else
-                    set -- "$@" "${pkg}.x86_64"
+                    pkg_arch=.i686
                 fi
-            else
-                set -- "$@" "$pkg"
             fi
+
+            # Check which is newer, wxGTK or wxGTK3.
+            if [ "$pkg" = wxGTK-devel ]; then
+                pkg=$(dnf -q --releasever=$(rpm -E %fedora) --showduplicates list wxGTK-devel wxGTK3-devel 2>/dev/null | awk '{ print $1 "\t" $2 }' | grep -Ev '^(Installed|Available)' | sort -rVu -k 2,2 | head -1 | awk '{ print $1 }' | sed -E 's/\.[^.]+//')
+
+                [ -z "$pkg" ] && pkg=wxGTK3-devel
+            fi
+
+            set -- "$@" "${pkg}${pkg_arch}"
         done
 
         # fedora has a bug where all necessary -devel packages are not pulled in for 32 bit direct -devel deps
@@ -876,8 +901,13 @@ archlinux_installdeps() {
 
     if [ -z "$target" -o "$target" = m32 ]; then
         if [ -z "$target" -o -z "$amd64" ]; then
-            # native build
-            check $pacman --noconfirm --needed -S "$gcc_pkg" $libs
+            # Native build.
+            #
+            # On newer versions wxgtk2 may have to be manually removed.
+            if ! $pacman --noconfirm --needed -S "$gcc_pkg" $libs; then
+                $pacman --noconfirm -R wxgtk2
+            fi
+            $pacman --noconfirm --needed -S "$gcc_pkg" $libs
         else
             # try to build 32 bit binaries
 
@@ -1078,6 +1108,15 @@ gentoo_installdeps() {
     build_instructions
 }
 
+alpine_installdeps() {
+    installing
+
+    check sudo apk add cmake ninja g++ ccache nasm gettext-dev zlib-dev mesa-dev sdl2-dev glu-dev sfml-dev wxwidgets-dev gtk+3.0-dev zip
+
+    build_instructions
+}
+
+
 windows_installdeps() {
     msys2=1
 
@@ -1087,7 +1126,24 @@ windows_installdeps() {
     # update catalogs
     check pacman -Sy
 
-    pkgs="SDL2 sfml wxWidgets zlib binutils cmake crt-git extra-cmake-modules gcc gcc-libs gcc-libgfortran gdb headers-git make pkg-config tools-git windows-default-manifest libmangle-git nasm ninja"
+    pkgs=
+
+    case "$target" in
+        *clang*)
+            pkgs="lldb"
+            ;;
+        *)
+            pkgs="$pkgs gcc gcc-libs gcc-libgfortran"
+            ;;
+    esac
+
+    case "$target" in
+        *i686*)
+            pkgs="$pkgs nasm"
+            ;;
+    esac
+
+    pkgs="$pkgs SDL2 sfml wxWidgets3.2 zlib binutils cmake crt-git extra-cmake-modules headers-git make pkgconf tools-git windows-default-manifest libmangle-git ninja gdb ccache"
 
     [ -n "$ENABLE_OPENAL" ] && pkgs="$pkgs openal"
     [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs ffmpeg"
@@ -1096,6 +1152,13 @@ windows_installdeps() {
     for p in $pkgs; do
         set -- "$@" "${target}-${p}"
     done
+
+    case "$target" in
+        *clang*)
+            # We use gcc windres for now, llvm-rc is sometimes broken.
+            set -- "$@" mingw-w64-x86_64-binutils
+        ;;
+    esac
 
     # install
     check pacman --noconfirm --needed -S git make zip "$@"
@@ -1147,7 +1210,7 @@ brew_installdeps() {
 
     check brew -v update
 
-    brews="nasm cmake ccache gettext pkg-config sdl2 wxmac ccache ninja"
+    brews="nasm cmake ccache gettext pkg-config sdl2 wxwidgets ccache ninja"
 
     [ -n "$ENABLE_FFMPEG" ] && brews="$brews ffmpeg"
 
@@ -1156,15 +1219,16 @@ brew_installdeps() {
         brews="$brews sfml"
 #    fi
 
-    set --
-    for f in $brews; do
-        if brew info "$f" | grep -Eq '^Not installed$'; then
-            set -- "$@" "$f"
-        fi
-    done
-    [ $# -gt 0 ] && check brew -v install "$@"
+    # This is necessary for the GitHub Actions CI:
+    brew -v install python
+    brew link --overwrite python
 
-    brew link gettext --force
+    check brew -v install -f $brews
+
+    for brew in gettext wxwidgets; do
+        brew unlink $brew
+        brew link   $brew --force
+    done
 
     brew -v cleanup
 
@@ -1209,7 +1273,7 @@ build_instructions() {
 
 $pre_build
 mkdir build && cd build
-$CMAKE .. $cmake_flags -G Ninja
+$CMAKE .. -DCMAKE_BUILD_TYPE=Release $cmake_flags -G Ninja
 ninja
 $post_build
 

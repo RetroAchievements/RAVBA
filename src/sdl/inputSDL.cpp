@@ -16,7 +16,7 @@
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "inputSDL.h"
-#include "../common/ConfigManager.h"
+#include "ConfigManager.h"
 
 #define SDLBUTTONS_NUM 14
 
@@ -48,7 +48,11 @@ static SDL_Joystick** sdlDevices = NULL;
 
 static EPad sdlDefaultJoypad = PAD_MAIN;
 
+static int autoFire = 0;
+static int autoFireToggle = 0;
 static int autoFireCountdown = 0;
+static int sensorX = 0;
+static int sensorY = 0;
 
 static uint32_t joypad[5][SDLBUTTONS_NUM] = {
     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },

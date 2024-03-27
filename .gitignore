@@ -4,10 +4,14 @@
 *.so
 *.dll
 *.exe
-.vscode
+.vscode/
 vsbuild
 
 RA_BuildVer.h
+
+# clangd files
+compile_commands.json
+.cache/
 
 # vim swap files
 *.sw?

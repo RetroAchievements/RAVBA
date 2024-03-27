@@ -20,7 +20,6 @@ uint8_t* gbSgbBorder = NULL;
 
 int gbSgbCGBSupport = 0;
 int gbSgbMask = 0;
-int gbSgbMode = 0;
 int gbSgbPacketState = GBSGB_NONE;
 int gbSgbBit = 0;
 int gbSgbPacketTimeout = 0;
@@ -319,7 +318,7 @@ void gbSgbPicture()
     gbSgbCGBSupport |= 4;
 
     if (gbBorderAutomatic && !gbBorderOn && gbSgbCGBSupport > 4) {
-        gbBorderOn = 1;
+        gbBorderOn = true;
         systemGbBorderOn();
     }
 
@@ -328,7 +327,7 @@ void gbSgbPicture()
 
     if (gbSgbMode && gbCgbMode && gbSgbCGBSupport > 4) {
         gbSgbCGBSupport = 0;
-        gbSgbMode = 0;
+        gbSgbMode = false;
         gbSgbMask = 0;
         gbSgbRenderBorder();
         gbReset();
@@ -663,7 +662,7 @@ void gbSgbChrTransfer()
     memcpy(&gbSgbBorderChar[address], gbSgbScreenBuffer, 128 * 32);
 
     if (gbBorderAutomatic && !gbBorderOn && gbSgbCGBSupport > 4) {
-        gbBorderOn = 1;
+        gbBorderOn = true;
         systemGbBorderOn();
     }
 
@@ -672,7 +671,7 @@ void gbSgbChrTransfer()
 
     if (gbSgbMode && gbCgbMode && gbSgbCGBSupport == 7) {
         gbSgbCGBSupport = 0;
-        gbSgbMode = 0;
+        gbSgbMode = false;
         gbSgbMask = 0;
         gbSgbRenderBorder();
         gbReset();
@@ -896,7 +895,7 @@ void gbSgbSaveGame(uint8_t*& data)
     utilWriteMem(data, gbSgbATFList, 45 * 20 * 18);
 }
 
-void gbSgbReadGame(const uint8_t*& data, int version)
+void gbSgbReadGame(const uint8_t*& data)
 {
 	utilReadDataMem(data, gbSgbSaveStructV3);
 

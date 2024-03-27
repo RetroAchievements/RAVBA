@@ -7,7 +7,6 @@
 #include "../System.h"
 #include "../Util.h"
 
-#include "../common/ConfigManager.h"
 #include "gb.h"
 #include "gbCheats.h"
 #include "gbGlobals.h"
@@ -99,7 +98,7 @@ void gbCheatsReadGameSkip(gzFile gzFile, int version)
         }
     }
 }
-#endif
+#endif /* __LIBRETRO__ */
 
 void gbCheatsSaveCheatList(const char* file)
 {
@@ -434,7 +433,7 @@ bool gbCheatReadGSCodeFile(const char* fileName)
 // Used to emulated GG codes
 uint8_t gbCheatRead(uint16_t address)
 {
-    if (!cheatsEnabled)
+    if (!coreOptions.cheatsEnabled)
         return gbMemoryMap[address >> 12][address & 0xFFF];
 
     for (int i = 0; i < gbCheatNumber; i++) {
@@ -456,7 +455,7 @@ uint8_t gbCheatRead(uint16_t address)
 // Used to emulate GS codes.
 void gbCheatWrite(bool reboot)
 {
-    if (cheatsEnabled) {
+    if (coreOptions.cheatsEnabled) {
         uint16_t address = 0;
 
         if (gbNextCheat >= gbCheatNumber)
