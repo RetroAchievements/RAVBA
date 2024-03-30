@@ -45,7 +45,7 @@
 #include "wayland.h"
 #include "widgets/group-check-box.h"
 #include "widgets/user-input-ctrl.h"
-//#include "wxhead.h"
+#include "wxhead.h"
 
 #ifdef RETROACHIEVEMENTS
 #include "retroachievements.h"
@@ -578,16 +578,13 @@ bool wxvbamApp::OnInit() {
     if (is_maximized) {
         frame->Maximize();
     }
-    
+
 #ifdef RETROACHIEVEMENTS
     RA_Init(frame->GetHWND());
 #endif
-    
+
     if (is_fullscreen && wxGetApp().pending_load != wxEmptyString)
         frame->ShowFullScreen(is_fullscreen);
-
-    if (isFullscreen && wxGetApp().pending_load != wxEmptyString)
-        frame->ShowFullScreen(isFullscreen);
 
     frame->Show(true);
 
@@ -1015,11 +1012,6 @@ int MainFrame::FilterEvent(wxEvent& event) {
             command = gopts.shortcuts.CommandForInput(config::UserInput(joy_event));
         }
     }
-
-    if (command == 0) {
-        return wxEventFilter::Event_Skip;
-    }
-
 #ifdef RETROACHIEVEMENTS
     else if (event.GetEventType() == wxEVT_COMMAND_MENU_SELECTED)
     {
@@ -1031,6 +1023,10 @@ int MainFrame::FilterEvent(wxEvent& event) {
         }
     }
 #endif
+
+    if (command == 0) {
+        return wxEventFilter::Event_Skip;
+    }
 
     wxCommandEvent command_event(wxEVT_COMMAND_MENU_SELECTED, command);
     command_event.SetEventObject(this);

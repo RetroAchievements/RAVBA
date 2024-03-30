@@ -3802,7 +3802,7 @@ void gbCleanUp()
 #endif  // !__LIBRETRO__
 }
 
-bool gbLoadRom(const char* filename) {
+bool gbLoadRom(const char* filename, int* fileSize) {
     int romSize = 0;
 
     if (gbRom != nullptr) {
@@ -3814,6 +3814,7 @@ bool gbLoadRom(const char* filename) {
     gbRom = utilLoad(filename, utilIsGBImage, nullptr, romSize);
     if (!gbRom)
         return false;
+    *fileSize = romSize;
 
     g_gbBatteryError = false;
 

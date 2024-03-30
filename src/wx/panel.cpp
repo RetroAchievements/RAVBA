@@ -91,7 +91,6 @@ double GetFilterScale() {
 #define out_16 (systemColorDepth == 16)
 
 }  // namespace
->>>>>>> source
 
 int emulating;
 
@@ -249,7 +248,7 @@ void GameArea::LoadGame(const wxString& name)
     }
 
     if (t == IMAGE_GB) {
-        if (!gbLoadRom(fn)) {
+        if (!gbLoadRom(fn, (int*)&rom_size)) {
             wxString s;
             s.Printf(_("Unable to load Game Boy ROM %s"), name.mb_str());
             wxMessageDialog dlg(GetParent(), s, _("Problem loading file"), wxOK | wxICON_ERROR);

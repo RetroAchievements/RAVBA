@@ -31,7 +31,7 @@ extern uint16_t IFF;
 int gbDis(char*, uint16_t);
 
 // Attempts to load the ROM file at `filename`. Returns true on success.
-bool gbLoadRom(const char* filename);
+bool gbLoadRom(const char* filename, int* fileSize);
 // Attempts to load the ROM at `romData`, with a size of `romSize`. This will
 // make a copy of `romData`. Returns true on success.
 bool gbLoadRomData(const char* romData, size_t romSize);

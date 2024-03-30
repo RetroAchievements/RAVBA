@@ -1715,7 +1715,8 @@ int main(int argc, char** argv)
         cartridgeType = (int)type;
 
         if (type == IMAGE_GB) {
-            failed = !gbLoadRom(szFile);
+            int rom_size;
+            failed = !gbLoadRom(szFile, &rom_size);
             if (!failed) {
                 gbGetHardwareType();
 

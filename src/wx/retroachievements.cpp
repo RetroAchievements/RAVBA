@@ -9,7 +9,7 @@ static void CausePause(bool pause)
     bool value;
 
     MainFrame* mf = wxGetApp().frame;
-    mf->GetMenuOptionBool("Pause", value);
+    mf->GetMenuOptionBool("Pause", &value);
     if (value != pause)
     {
         wxCommandEvent evh(wxEVT_COMMAND_MENU_SELECTED, XRCID("Pause"));
@@ -108,9 +108,9 @@ static void ResetEmulator()
     systemStopGamePlayback();
 
     // disabling the menu option prevents cheats from being evaluated each frame
-    if (cheatsEnabled)
+    if (coreOptions.cheatsEnabled)
     {
-        cheatsEnabled = false;
+        coreOptions.cheatsEnabled = false;
         mf->SetMenuOption("CheatsEnable", 0);
     }
 
@@ -125,9 +125,9 @@ static void ResetEmulator()
     }
 
     // reset frame rate
-    throttle = 100;
+    coreOptions.throttle = 100;
     if (mf->GetPanel()->game_type() != IMAGE_UNKNOWN)
-        soundSetThrottle(throttle);
+        soundSetThrottle(coreOptions.throttle);
 }
 
 static void LoadROM(const char* sFullPath) {}
@@ -152,16 +152,16 @@ void RA_Init(HWND hWnd)
     if (RA_HardcoreModeIsActive())
     {
         // disable cheats
-        if (cheatsEnabled)
+        if (coreOptions.cheatsEnabled)
         {
-            cheatsEnabled = false;
+            coreOptions.cheatsEnabled = false;
             MainFrame* mf = wxGetApp().frame;
             mf->SetMenuOption("CheatsEnable", 0);
         }
 
         // ensure throttle is not below 100%
-        if (throttle < 100)
-            throttle = 100;
+        if (coreOptions.throttle < 100)
+            coreOptions.throttle = 100;
     }
 }
 

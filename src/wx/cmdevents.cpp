@@ -2080,8 +2080,8 @@ EVT_HANDLER(GeneralConfigure, "General options...")
     int result = ShowModal(dlg);
 
 #ifdef RETROACHIEVEMENTS
-    if (RA_HardcoreModeIsActive() && throttle < 100 && throttle != 0)
-        throttle = 100;
+    if (RA_HardcoreModeIsActive() && coreOptions.throttle < 100 && coreOptions.throttle != 0)
+        coreOptions.throttle = 100;
 #endif
 
     if (result == wxID_OK)
