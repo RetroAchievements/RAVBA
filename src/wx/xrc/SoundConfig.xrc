@@ -5,7 +5,9 @@
     <object class="wxBoxSizer">
     <orient>wxVERTICAL</orient>
     <object class="sizeritem">
+    <flag>wxEXPAND|wxALL</flag>
     <object class="wxNotebook">
+    <flag>wxEXPAND|wxALL</flag>
     <object class="notebookpage">
       <object class="wxPanel">
         <object class="wxFlexGridSizer">
@@ -13,7 +15,7 @@
             <flag>wxALL|wxALIGN_RIGHT|wxALIGN_CENTRE_VERTICAL</flag>
             <border>5</border>
             <object class="wxStaticText">
-              <label>Volume :</label>
+              <label>Volume:</label>
             </object>
           </object>
           <object class="sizeritem">
@@ -68,7 +70,7 @@
             <flag>wxALL|wxALIGN_RIGHT|wxALIGN_CENTRE_VERTICAL</flag>
             <border>5</border>
             <object class="wxStaticText">
-              <label>Sample rate :</label>
+              <label>Sample rate:</label>
             </object>
           </object>
           <object class="sizeritem">
@@ -100,7 +102,7 @@
                 <object class="wxBoxSizer">
                   <object class="sizeritem">
                     <object class="wxRadioButton" name="SDL">
-                      <label>SDL</label>
+                      <label translate="0">SDL</label>
                       <style>wxRB_GROUP</style>
                     </object>
                     <flag>wxALL|wxEXPAND</flag>
@@ -108,28 +110,28 @@
                   </object>
                   <object class="sizeritem">
                     <object class="wxRadioButton" name="OpenAL">
-                      <label>OpenAL</label>
+                      <label translate="0">OpenAL</label>
                     </object>
                     <flag>wxALL|wxEXPAND</flag>
                     <border>5</border>
                   </object>
                   <object class="sizeritem">
                     <object class="wxRadioButton" name="DirectSound">
-                      <label>DirectSound</label>
+                      <label>Direct Sound</label>
                     </object>
                     <flag>wxALL</flag>
                     <border>5</border>
                   </object>
                   <object class="sizeritem">
                     <object class="wxRadioButton" name="XAudio2">
-                      <label>XAudio2</label>
+                      <label translate="0">XAudio2</label>
                     </object>
                     <flag>wxALL|wxEXPAND</flag>
                     <border>5</border>
                   </object>
                   <object class="sizeritem">
                     <object class="wxRadioButton" name="FAudio">
-                      <label>FAudio</label>
+                      <label translate="0">FAudio</label>
                     </object>
                     <flag>wxALL|wxEXPAND</flag>
                     <border>5</border>
@@ -266,7 +268,7 @@
                         </object>
                         <object class="sizeritem">
                           <object class="wxStaticText">
-                            <label>Left/Right</label>
+                            <label>Left / Right</label>
                           </object>
                           <flag>wxALL</flag>
                           <border>5</border>
@@ -287,7 +289,7 @@
           </object>
         </object>
       </object>
-      <label>Game Boy</label>
+      <label translate="0">Game Boy</label>
     </object>
     <object class="notebookpage">
       <object class="wxPanel">
@@ -332,9 +334,10 @@
           </object>
         </object>
       </object>
-      <label>Game Boy Advance</label>
+      <label translate="0">Game Boy Advance</label>
     </object>
   </object>
+  <option>1</option>
   </object>
       <object class="sizeritem">
         <flag>wxALL|wxEXPAND</flag>

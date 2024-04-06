@@ -1,6 +1,8 @@
 #ifndef GBAINLINE_H
 #define GBAINLINE_H
 
+#include <type_traits>
+
 #include "../System.h"
 #include "../common/Port.h"
 #include "GBALink.h"
@@ -9,6 +11,7 @@
 #include "Sound.h"
 #include "agbprint.h"
 #include "remote.h"
+#include "stdint.h"
 
 extern const uint32_t objTilesAddress[3];
 
@@ -20,8 +23,9 @@ extern bool cpuSramEnabled;
 extern bool cpuFlashEnabled;
 extern bool cpuEEPROMEnabled;
 extern bool cpuEEPROMSensorEnabled;
-extern bool cpuDmaHack;
+extern bool cpuDmaRunning;
 extern uint32_t cpuDmaLast;
+extern uint32_t cpuDmaPC;
 extern bool timer0On;
 extern int timer0Ticks;
 extern int timer0ClockReload;
@@ -43,6 +47,28 @@ extern int cpuTotalTicks;
 
 #define CPUReadMemoryQuick(addr) \
     READ32LE(((uint32_t*)&map[(addr) >> 24].address[(addr)&map[(addr) >> 24].mask]))
+
+static inline uint16_t DowncastU16(uint32_t value) {
+    return static_cast<uint16_t>(value);
+}
+
+static inline int16_t Downcast16(int32_t value) {
+    return static_cast<int16_t>(value);
+}
+
+template<typename T>
+static inline uint8_t DowncastU8(T value) {
+    static_assert(std::is_integral<T>::value, "Integral type required.");
+    static_assert(sizeof(T) ==2 || sizeof(T) == 4, "16 or 32 bits int required");
+    return static_cast<uint8_t>(value);
+}
+
+template<typename T>
+static inline int8_t Downcast8(T value) {
+    static_assert(std::is_integral<T>::value, "Integral type required.");
+    static_assert(sizeof(T) ==2 || sizeof(T) == 4, "16 or 32 bits int required");
+    return static_cast<int8_t>(value);
+}
 
 extern uint32_t myROM[];
 
@@ -130,7 +156,7 @@ static inline uint32_t CPUReadMemory(uint32_t address)
             value = flashRead(address) * 0x01010101;
             break;
         }
-    // default
+	/* fallthrough */
     default:
     unreadable:
 #ifdef GBA_LOGGING
@@ -140,7 +166,7 @@ static inline uint32_t CPUReadMemory(uint32_t address)
                 armMode ? armNextPC - 4 : armNextPC - 2);
         }
 #endif
-        if (cpuDmaHack) {
+        if (cpuDmaRunning || ((reg[15].I - cpuDmaPC) == (armState ? 4 : 2))) {
             value = cpuDmaLast;
         } else {
             if (armState) {
@@ -280,11 +306,10 @@ static inline uint32_t CPUReadHalfWord(uint32_t address)
             value = flashRead(address) * 0x0101;
             break;
         }
-    break;
-    // default
+	/* fallthrough */
     default:
     unreadable:
-        if (cpuDmaHack) {
+        if (cpuDmaRunning|| ((reg[15].I - cpuDmaPC) == (armState ? 4 : 2))) {
             value = cpuDmaLast & 0xFFFF;
         } else {
             int param = reg[15].I;
@@ -390,7 +415,7 @@ static inline uint8_t CPUReadByte(uint32_t address)
         return rom[address & 0x1FFFFFF];
     case 13:
         if (cpuEEPROMEnabled)
-            return eepromRead(address);
+            return DowncastU8(eepromRead(address));
         goto unreadable;
     case 14:
     case 15:
@@ -399,15 +424,15 @@ static inline uint8_t CPUReadByte(uint32_t address)
 
         switch (address & 0x00008f00) {
         case 0x8200:
-            return systemGetSensorX() & 255;
+            return DowncastU8(systemGetSensorX());
         case 0x8300:
-            return (systemGetSensorX() >> 8) | 0x80;
+            return DowncastU8((systemGetSensorX() >> 8) | 0x80);
         case 0x8400:
-            return systemGetSensorY() & 255;
+            return DowncastU8(systemGetSensorY());
         case 0x8500:
-            return systemGetSensorY() >> 8;
+            return DowncastU8(systemGetSensorY() >> 8);
         }
-    // default
+	/* fallthrough */
     default:
     unreadable:
 #ifdef GBA_LOGGING
@@ -417,7 +442,7 @@ static inline uint8_t CPUReadByte(uint32_t address)
                 armMode ? armNextPC - 4 : armNextPC - 2);
         }
 #endif
-        if (cpuDmaHack) {
+        if (cpuDmaRunning || ((reg[15].I - cpuDmaPC) == (armState ? 4 : 2))) {
             return cpuDmaLast & 0xFF;
         } else {
             if (armState) {
@@ -508,7 +533,7 @@ static inline void CPUWriteMemory(uint32_t address, uint32_t value)
         break;
     case 0x0D:
         if (cpuEEPROMEnabled) {
-            eepromWrite(address, value);
+            eepromWrite(address, DowncastU8(value));
             break;
         }
         goto unwritable;
@@ -627,7 +652,7 @@ static inline void CPUWriteHalfWord(uint32_t address, uint16_t value)
             (*cpuSaveGameFunc)(address, (uint8_t)value);
             break;
         }
-        // fallthrough
+        /* fallthrough */
     default:
     unwritable:
 #ifdef GBA_LOGGING
@@ -771,7 +796,7 @@ static inline void CPUWriteByte(uint32_t address, uint8_t b)
         goto unwritable;
     case 14:
     case 15:
-        if ((saveType != 5) && ((!eepromInUse) | cpuSramEnabled | cpuFlashEnabled)) {
+        if ((coreOptions.saveType != 5) && ((!eepromInUse) | cpuSramEnabled | cpuFlashEnabled)) {
             // if(!cpuEEPROMEnabled && (cpuSramEnabled | cpuFlashEnabled)) {
 
             (*cpuSaveGameFunc)(address, b);

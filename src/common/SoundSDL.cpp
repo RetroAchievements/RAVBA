@@ -19,7 +19,6 @@
 #include <iostream>
 #include <SDL_events.h>
 #include "SoundSDL.h"
-#include "ConfigManager.h"
 #include "../gba/Globals.h"
 #include "../gba/Sound.h"
 
@@ -30,8 +29,8 @@ const double SoundSDL::buftime = 0.100;
 
 SoundSDL::SoundSDL():
     samples_buf(0),
-    sound_device(-1),
-    current_rate(throttle),
+    sound_device(0),
+    current_rate(static_cast<unsigned short>(coreOptions.throttle)),
     initialized(false)
 {}
 
@@ -40,7 +39,7 @@ void SoundSDL::soundCallback(void* data, uint8_t* stream, int len) {
 }
 
 bool SoundSDL::should_wait() {
-    return emulating && !speedup && current_rate && !gba_joybus_active;
+    return emulating && !coreOptions.speedup && current_rate && !gba_joybus_active;
 }
 
 std::size_t SoundSDL::buffer_size() {
@@ -86,7 +85,7 @@ void SoundSDL::write(uint16_t * finalWave, int length) {
     if (SDL_GetAudioDeviceStatus(sound_device) != SDL_AUDIO_PLAYING)
 	SDL_PauseAudioDevice(sound_device, 0);
 
-    unsigned int samples = length / 4;
+    std::size_t samples = length / 4;
     std::size_t avail;
 
     while ((avail = samples_buf.avail() / 2) < samples) {
@@ -121,7 +120,7 @@ bool SoundSDL::init(long sampleRate) {
     SDL_memset(&audio, 0, sizeof(audio));
 
     // for "no throttle" use regular rate, audio is just dropped
-    audio.freq     = current_rate ? sampleRate * (current_rate / 100.0) : sampleRate;
+    audio.freq     = current_rate ? static_cast<int>(sampleRate * (current_rate / 100.0)) : sampleRate;
 
     audio.format   = AUDIO_S16SYS;
     audio.channels = 2;
@@ -138,7 +137,7 @@ bool SoundSDL::init(long sampleRate) {
         return false;
     }
 
-    samples_buf.reset(std::ceil(buftime * sampleRate * 2));
+    samples_buf.reset(static_cast<size_t>(std::ceil(buftime * sampleRate * 2)));
 
     mutex          = SDL_CreateMutex();
     data_available = SDL_CreateSemaphore(0);

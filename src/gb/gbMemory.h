@@ -157,6 +157,7 @@ extern mapperMBC1 gbDataMBC1;
 extern mapperMBC2 gbDataMBC2;
 extern mapperMBC3 gbDataMBC3;
 extern mapperMBC5 gbDataMBC5;
+extern mapperMBC7 gbDataMBC7;
 extern mapperHuC1 gbDataHuC1;
 extern mapperHuC3 gbDataHuC3;
 extern mapperHuC3RTC gbRTCHuC3;
@@ -190,9 +191,6 @@ void mapperMMM01ROM(uint16_t, uint8_t);
 void mapperMMM01RAM(uint16_t, uint8_t);
 void mapperGGROM(uint16_t, uint8_t);
 void mapperGS3ROM(uint16_t, uint8_t);
-// extern void (*mapper)(uint16_t,uint8_t);
-// extern void (*mapperRAM)(uint16_t,uint8_t);
-// extern uint8_t (*mapperReadRAM)(uint16_t);
 
 extern void memoryUpdateMapMBC1();
 extern void memoryUpdateMapMBC2();

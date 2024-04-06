@@ -7,10 +7,10 @@
         <label>Open...</label>
       </object>
       <object class="wxMenuItem" name="OpenGB">
-        <label>Open _GB...</label>
+        <label>Open _Game Boy...</label>
       </object>
       <object class="wxMenuItem" name="OpenGBC">
-        <label>Open GB_C...</label>
+        <label>Open Game Boy _Color...</label>
       </object>
       <object class="wxMenu" name="RecentMenu">
         <label>Open rece_nt</label>
@@ -55,38 +55,38 @@
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="LoadGame01">
-          <label>_1</label>
+          <label translate="0">_1</label>
         </object>
         <object class="wxMenuItem" name="LoadGame02">
-          <label>_2</label>
+          <label translate="0">_2</label>
         </object>
         <object class="wxMenuItem" name="LoadGame03">
-          <label>_3</label>
+          <label translate="0">_3</label>
         </object>
         <object class="wxMenuItem" name="LoadGame04">
-          <label>_4</label>
+          <label translate="0">_4</label>
         </object>
         <object class="wxMenuItem" name="LoadGame05">
-          <label>_5</label>
+          <label translate="0">_5</label>
         </object>
         <object class="wxMenuItem" name="LoadGame06">
-          <label>_6</label>
+          <label translate="0">_6</label>
         </object>
         <object class="wxMenuItem" name="LoadGame07">
-          <label>_7</label>
+          <label translate="0">_7</label>
         </object>
         <object class="wxMenuItem" name="LoadGame08">
-          <label>_8</label>
+          <label translate="0">_8</label>
         </object>
         <object class="wxMenuItem" name="LoadGame09">
-          <label>_9</label>
+          <label translate="0">_9</label>
         </object>
         <object class="wxMenuItem" name="LoadGame10">
-          <label>1_0</label>
+          <label translate="0">1_0</label>
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="Load">
-          <label>From _File ...</label>
+          <label>From _File...</label>
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="KeepSaves">
@@ -111,7 +111,7 @@
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="SaveGame01">
-          <label>_1</label>
+          <label translate="0">_1</label>
         </object>
         <object class="wxMenuItem" name="SaveGame02">
           <label>_2</label>
@@ -142,7 +142,7 @@
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="Save">
-          <label>To _File ...</label>
+          <label>To _File...</label>
         </object>
         <label>_Save state</label>
       </object>
@@ -158,10 +158,10 @@
           <label>_Battery file...</label>
         </object>
         <object class="wxMenuItem" name="ImportGamesharkCodeFile">
-          <label>Gameshark _code file...</label>
+          <label>Game Shark _code file...</label>
         </object>
         <object class="wxMenuItem" name="ImportGamesharkActionReplaySnapshot">
-          <label>_Gameshark snapshot...</label>
+          <label>_Game Shark snapshot...</label>
         </object>
         <label>_Import</label>
       </object>
@@ -170,7 +170,7 @@
           <label>_Battery file...</label>
         </object>
         <object class="wxMenuItem" name="ExportGamesharkSnapshot">
-          <label>_Gameshark snapshot...</label>
+          <label>_Game Shark snapshot...</label>
         </object>
         <label>_Export</label>
       </object>
@@ -252,7 +252,7 @@
         <checkable>1</checkable>
       </object>
       <object class="wxMenuItem" name="ApplyPatches">
-        <label>_Auto IPS/UPS/IPF patch</label>
+        <label>_Auto IPS / UPS / IPF patch</label>
         <checkable>1</checkable>
       </object>
       <object class="wxMenuItem" name="PauseWhenInactive">
@@ -269,7 +269,7 @@
       <object class="wxMenu" name="LinkMenu">
         <label>_Link</label>
         <object class="wxMenuItem" name="LanLink">
-          <label>Start _Network Link ...</label>
+          <label>Start _Network Link...</label>
         </object>
         <object class="wxMenu">
           <label>_Type</label>
@@ -286,11 +286,11 @@
             <checkable>1</checkable>
           </object>
           <object class="wxMenuItem" name="LinkType3GameCube">
-            <label>_GameCube</label>
+            <label translate="0">_Game Cube</label>
             <checkable>1</checkable>
           </object>
           <object class="wxMenuItem" name="LinkType4Gameboy">
-            <label>_Game Boy</label>
+            <label translate="0">_Game Boy</label>
             <checkable>1</checkable>
           </object>
         </object>
@@ -307,13 +307,13 @@
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="LinkConfigure">
-          <label>_Configure ...</label>
+          <label>_Configure...</label>
         </object>
       </object>
       <object class="wxMenu">
         <label>_Video</label>
         <object class="wxMenuItem" name="DisplayConfigure">
-          <label>_Configure ...</label>
+          <label>_Configure...</label>
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="Fullscreen">
@@ -351,10 +351,6 @@
           <label>_Retain aspect ratio</label>
           <checkable>1</checkable>
         </object>
-        <object class="wxMenuItem" name="MMX">
-          <label>Enable MMX</label>
-          <checkable>1</checkable>
-        </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="Bilinear">
           <label>_Bilinear filter</label>
@@ -388,7 +384,7 @@
       <object class="wxMenu">
         <label>_Audio</label>
         <object class="wxMenuItem" name="SoundConfigure">
-          <label>_Configure ...</label>
+          <label>_Configure...</label>
         </object>
         <object class="wxMenuItem" name="IncreaseVolume">
           <label>_Increase volume</label>
@@ -404,27 +400,27 @@
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="GBASoundInterpolation">
-          <label>_GBA sound interpolation</label>
+          <label>_Game Boy Advance sound interpolation</label>
           <checkable>1</checkable>
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="GBEnhanceSound">
-          <label>_GB sound enhancement</label>
+          <label>_Game Boy sound enhancement</label>
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="GBSurround">
-          <label>_GB surround sound effect</label>
+          <label>_Game Boy surround sound effect</label>
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="GBDeclicking">
-          <label>_GB sound declicking</label>
+          <label>_Game Boy sound declicking</label>
           <checkable>1</checkable>
         </object>
       </object>
       <object class="wxMenu">
         <label>_Input</label>
         <object class="wxMenuItem" name="JoypadConfigure">
-          <label>_Configure ...</label>
+          <label>_Configure...</label>
         </object>
         <object class="wxMenuItem" name="AllowKeyboardBackgroundInput">
           <label>Allow _keyboard background input</label>
@@ -438,19 +434,19 @@
         <object class="wxMenu">
           <label>_Autofire</label>
           <object class="wxMenuItem" name="JoypadAutofireA">
-            <label>_A</label>
+            <label translate="0">_A</label>
             <checkable>1</checkable>
           </object>
           <object class="wxMenuItem" name="JoypadAutofireB">
-            <label>_B</label>
+            <label translate="0">_B</label>
             <checkable>1</checkable>
           </object>
           <object class="wxMenuItem" name="JoypadAutofireL">
-            <label>_L</label>
+            <label translate="0">_L</label>
             <checkable>1</checkable>
           </object>
           <object class="wxMenuItem" name="JoypadAutofireR">
-            <label>_R</label>
+            <label translate="0">_R</label>
             <checkable>1</checkable>
           </object>
         </object>
@@ -499,9 +495,9 @@
         </object>
       </object>
       <object class="wxMenu">
-        <label>_Game Boy Advance</label>
+        <label translate="0">_Game Boy Advance</label>
         <object class="wxMenuItem" name="GameBoyAdvanceConfigure">
-          <label>Configure ...</label>
+          <label>Configure...</label>
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="RTC">
@@ -522,13 +518,13 @@
         </object>
       </object>
       <object class="wxMenu">
-        <label>_Game Boy</label>
+        <label translate="0">_Game Boy</label>
         <object class="wxMenuItem" name="GameBoyConfigure">
-          <label>Configure ...</label>
+          <label>Configure...</label>
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="GBColorOption">
-          <label>_GB color option</label>
+          <label>_Game Boy color option</label>
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="GBLcdFilter">
@@ -536,11 +532,11 @@
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="ColorizerHack">
-          <label>_GB Colorizer Hack (requires restart)</label>
+          <label>_Game Boy Colorizer Hack (requires restart)</label>
           <checkable>1</checkable>
         </object>        
         <object class="wxMenuItem" name="Printer">
-          <label>_GB printer</label>
+          <label>_Game Boy printer</label>
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="PrintGather">
@@ -553,28 +549,28 @@
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="BootRomGB">
-          <label>_Use GB BIOS file (requires restart)</label>
+          <label>_Use Game Boy BIOS file (requires restart)</label>
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="BootRomGBC">
-          <label>_Use GBC BIOS file</label>
+          <label>_Use Game Boy Color BIOS file</label>
           <checkable>1</checkable>
         </object>
       </object>
         <object class="wxMenuItem" name="GeneralConfigure">
-          <label>_General ...</label>
+          <label>_General...</label>
         </object>
         <object class="wxMenuItem" name="SpeedupConfigure">
-          <label>_Speedup / Turbo ...</label>
+          <label>_Speedup / Turbo...</label>
         </object>
         <object class="wxMenuItem" name="EmulatorDirectories">
-          <label>D_irectories ...</label>
+          <label>D_irectories...</label>
         </object>
         <object class="wxMenuItem" name="Customize">
-          <label>_Key Shortcuts ...</label>
+          <label>_Key Shortcuts...</label>
         </object>
         <object class="wxMenuItem" name="UIConfigure">
-          <label>_UI Settings ...</label>
+          <label>_UI Settings...</label>
         </object>
     </object>
     <object class="wxMenu">
@@ -582,14 +578,14 @@
       <object class="wxMenu">
         <label>_Cheats</label>
         <object class="wxMenuItem" name="CheatsList">
-          <label>List _cheats ...</label>
+          <label>List _cheats...</label>
         </object>
         <object class="wxMenuItem" name="CheatsSearch">
-          <label>Find c_heat ...</label>
+          <label>Find c_heat...</label>
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="CheatsAutoSaveLoad">
-          <label>A_utomatically save/load cheats</label>
+          <label>A_utomatically save / load cheats</label>
           <checkable>1</checkable>
         </object>
         <object class="wxMenuItem" name="CheatsEnable">
@@ -614,7 +610,7 @@
         <object class="wxMenuItem" name="DebugGDBDisconnect">
           <label>_Disconnect</label>
         </object>
-        <label>_GDB</label>
+        <label translate="0">_GDB</label>
       </object>
       <object class="wxMenuItem" name="Disassemble">
         <label>_Disassemble...</label>
@@ -647,42 +643,42 @@
         </object>
         <object class="separator"/>
         <object class="wxMenuItem" name="VideoLayersBG0">
-          <label>BG _0</label>
+          <label translate="0">BG _0</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
         <object class="wxMenuItem" name="VideoLayersBG1">
-          <label>BG _1</label>
+          <label translate="0">BG _1</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
         <object class="wxMenuItem" name="VideoLayersBG2">
-          <label>BG _2</label>
+          <label translate="0">BG _2</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
         <object class="wxMenuItem" name="VideoLayersBG3">
-          <label>BG _3</label>
+          <label translate="0">BG _3</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
         <object class="wxMenuItem" name="VideoLayersOBJ">
-          <label>_OBJ</label>
+          <label translate="0">_OBJ</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
         <object class="wxMenuItem" name="VideoLayersWIN0">
-          <label>_WIN 0</label>
+          <label translate="0">_WIN 0</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
         <object class="wxMenuItem" name="VideoLayersWIN1">
-          <label>W_IN 1</label>
+          <label translate="0">W_IN 1</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
         <object class="wxMenuItem" name="VideoLayersOBJWIN">
-          <label>O_BJ WIN</label>
+          <label translate="0">O_BJ WIN</label>
           <checkable>1</checkable>
           <checked>1</checked>
         </object>
@@ -728,7 +724,7 @@
         <label>Report _Bugs</label>
       </object>
       <object class="wxMenuItem" name="FAQ">
-        <label>VBA-M Support _Forum</label>
+        <label>Visual Boy Advance-M Support _Forum</label>
       </object>
       <object class="wxMenuItem" name="Translate">
         <label>Translations</label>

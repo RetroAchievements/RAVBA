@@ -25,36 +25,32 @@ const supportedCodecs videoSupported[] = {
 std::vector<char *> recording::getSupVidNames()
 {
     std::vector<char *> result;
-    size_t size = sizeof(videoSupported) / sizeof(videoSupported[0]);
-    for (size_t i = 0; i < size; ++i)
-        result.push_back((char *)videoSupported[i].longName);
+    for (auto&& codec : videoSupported)
+        result.push_back((char *)codec.longName);
     return result;
 }
 
 std::vector<char *> recording::getSupVidExts()
 {
     std::vector<char *> result;
-    size_t size = sizeof(videoSupported) / sizeof(videoSupported[0]);
-    for (size_t i = 0; i < size; ++i)
-        result.push_back((char *)videoSupported[i].exts);
+    for (auto&& codec : videoSupported)
+        result.push_back((char *)codec.exts);
     return result;
 }
 
 std::vector<char *> recording::getSupAudNames()
 {
     std::vector<char *> result;
-    size_t size = sizeof(audioSupported) / sizeof(audioSupported[0]);
-    for (size_t i = 0; i < size; ++i)
-        result.push_back((char *)audioSupported[i].longName);
+    for (auto&& codec : audioSupported)
+        result.push_back((char *)codec.longName);
     return result;
 }
 
 std::vector<char *> recording::getSupAudExts()
 {
     std::vector<char *> result;
-    size_t size = sizeof(audioSupported) / sizeof(audioSupported[0]);
-    for (size_t i = 0; i < size; ++i)
-        result.push_back((char *)audioSupported[i].exts);
+    for (auto&& codec : audioSupported)
+        result.push_back((char *)codec.exts);
     return result;
 }
 
@@ -343,34 +339,34 @@ recording::MediaRet recording::MediaRecorder::Record(const char *fname, int widt
     ret = setup_common(fname);
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     // video stream
     ret = setup_video_stream_info(width, height, depth);
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     ret = setup_video_stream(width, height);
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     // audio stream
     ret = setup_audio_stream();
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     // last details
     ret = finish_setup(fname);
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     return MRET_OK;
@@ -413,12 +409,12 @@ recording::MediaRet recording::MediaRecorder::AddFrame(const uint8_t *vid)
     return MRET_OK;
 }
 
-void recording::MediaRecorder::Stop()
+void recording::MediaRecorder::Stop(bool initSuccess)
 {
     if (oc)
     {
         // write the trailer; must be called before av_codec_close()
-        if (!audioOnlyRecording)
+        if (initSuccess) // only call av_write_trailer() if initialization went ok
             av_write_trailer(oc);
     }
     isRecording = false;
@@ -525,21 +521,21 @@ recording::MediaRet recording::MediaRecorder::Record(const char *fname)
     ret = setup_common(fname);
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     // audio stream
     ret = setup_audio_stream();
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     // last details
     ret = finish_setup(fname);
     if (ret != MRET_OK)
     {
-        Stop();
+        Stop(false);
         return ret;
     }
     return MRET_OK;

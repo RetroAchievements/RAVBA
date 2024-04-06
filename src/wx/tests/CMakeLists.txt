@@ -1,6 +1,9 @@
-include(doctest)
+# TODO: Does not link on CLANG64.
+if(MSYS AND CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+    return()
+endif()
 
-include_directories("${CMAKE_SOURCE_DIR}/third_party/include/doctest")
+include(doctest)
 
 function(add_doctest_test test_src)
     string(REGEX REPLACE ".cpp$" "" test_name "${test_src}")

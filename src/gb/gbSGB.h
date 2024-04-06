@@ -10,14 +10,13 @@ void gbSgbDoBitTransfer(uint8_t);
 void gbSgbRenderBorder();
 #ifdef __LIBRETRO__
 void gbSgbSaveGame(uint8_t*&);
-void gbSgbReadGame(const uint8_t*&, int);
+void gbSgbReadGame(const uint8_t*&);
 #else
 void gbSgbSaveGame(gzFile);
 void gbSgbReadGame(gzFile, int version);
 #endif
 
 extern uint8_t gbSgbATF[20 * 18];
-extern int gbSgbMode;
 extern int gbSgbMask;
 extern int gbSgbMultiplayer;
 extern uint8_t gbSgbNextController;

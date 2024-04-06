@@ -1,18 +1,13 @@
 #ifndef WX_WXHEAD_H
 #define WX_WXHEAD_H
 
-// For compilers that support precompilation, includes <wx/wx.h>.
-#include <wx/wxprec.h>
-
 #ifdef __BORLANDC__
 #pragma hdrstop
 #endif
 
-// for all others, include the necessary headers (this file is usually all you
-// need because it includes almost all "standard" wxWidgets headers)
-#ifndef WX_PRECOMP
+#include <cstdint>
+
 #include <wx/wx.h>
-#endif
 
 // The following are not pulled in by wx.h
 
@@ -27,6 +22,14 @@
 // filehistory.h is separate only in 2.9+
 #include <wx/docview.h>
 
+// This is necessary to build with gcc on Fedora.
+using std::uint8_t;
+using std::uint16_t;
+using std::uint32_t;
+using std::int8_t;
+using std::int16_t;
+using std::int32_t;
+
 #ifndef NO_OGL
 // glcanvas must be included before SFML for MacOSX
 // originally, this was confined to drawing.h.
@@ -38,15 +41,6 @@
 #ifdef BadRequest
 #undef BadRequest
 #endif
-#endif
-
-// compatibility with MacOSX 10.5
-#if !wxCHECK_VERSION(2, 8, 8)
-#define AddFileWithMimeType(a, b, c, m) AddFile(a, b, c)
-#define GetItemLabel GetText
-#define SetItemLabel SetText
-#define GetMenuLabel GetLabelTop
-#define GetItemLabelText GetLabel
 #endif
 
 // compatibility with wx-2.9
@@ -63,41 +57,17 @@
 // GetAccel is inefficent anyway (often I don't want to convert to wxAccEnt)
 // This is a working replacement for SetAccel, at least.
 
-#include "wx/keyedit.h"
+#include "wxutil.h"
 
-static inline void DoSetAccel(wxMenuItem* mi, wxAcceleratorEntryUnicode* acc)
-{
-    // cannot use SDL keybinding as text without wx assertion error
-    if (acc && acc->GetJoystick() != 0) return;
-
-    wxString lab = mi->GetItemLabel();
-    size_t tab = lab.find(wxT('\t'));
-
-    // following short circuit returns are to avoid UI update on no change
-    if (tab == wxString::npos && !acc)
-        return;
-
-    wxString accs;
-
-    if (acc)
-        // actually, use keyedit's ToString(), as it is more reliable
-        // and doesn't generate wx assertions
-        // accs = acc->ToString();
-        accs = wxKeyTextCtrl::ToString(acc->GetFlags(), acc->GetKeyCode());
-
-    if (tab != wxString::npos && accs == lab.substr(tab + 1))
-        return;
-
-    if (tab != wxString::npos)
-        lab.resize(tab);
-
-    if (acc) {
-        lab.append(wxT('\t'));
-        lab.append(accs);
-    }
-
-    mi->SetItemLabel(lab);
-}
+// This enum must be kept in sync with the one in vbam-options-static.cpp.
+// TODO: These 2 enums should be unified and a validator created for this enum.
+enum audioapi {
+    AUD_SDL,
+    AUD_OPENAL,
+    AUD_DIRECTSOUND,
+    AUD_XAUDIO2,
+    AUD_FAUDIO
+};
 
 // wxrc helpers (for dynamic strings instead of constant)
 #define XRCID_D(str) wxXmlResource::GetXRCID(str)
@@ -122,8 +92,5 @@ static inline const wxCharBuffer UTF8(wxString str)
 {
     return str.mb_str(wxConvUTF8);
 }
-
-// by default, only 9 recent items
-#define wxID_FILE10 (wxID_FILE9 + 1)
 
 #endif /* WX_WXHEAD_H */
