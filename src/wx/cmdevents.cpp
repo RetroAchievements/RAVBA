@@ -1956,6 +1956,11 @@ void MainFrame::GDBBreak()
 {
     ModalPause mp;
 
+#ifdef RETROACHIEVEMENTS
+    if (!RA_WarnDisableHardcore("break into GDB"))
+        return;
+#endif
+
     if (gopts.gdb_port == 0) {
         int port_selected = GetGDBPort(this);
 
