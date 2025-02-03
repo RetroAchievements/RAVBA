@@ -191,6 +191,9 @@ static unsigned char PostRAMByteReader(unsigned int nOffs)
 }
 static void PostRAMByteWriter(unsigned int nOffs, unsigned char nVal) { gbWriteMemory(nOffs + 0xE000, nVal); }
 
+// GBC RAM reader/writer targeting work RAM bank 1
+static unsigned char GBCBank1RAMReader(unsigned int nOffs) { return gbWram ? gbWram[nOffs + 0x1000] : 0; }
+static void GBCBank1RAMWriter(unsigned int nOffs, unsigned char nVal) { if (gbWram) gbWram[nOffs + 0x1000] = nVal; }
 // GBC RAM reader/writer targeting work RAM banks 2-7
 static unsigned char GBCBankedRAMReader(unsigned int nOffs) { return gbWram ? gbWram[nOffs + 0x2000] : 0; }
 static void GBCBankedRAMWriter(unsigned int nOffs, unsigned char nVal) { if (gbWram) gbWram[nOffs + 0x2000] = nVal; }
@@ -220,9 +223,11 @@ void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* 
             // Bits 0-2 of $FF70 indicate which bank is currently accessible to the program in the $D000-$DFFF range.
             // Since that makes it hard to work with the memory in that region when building/running achievements, the memory exposed to
             // the achievements in $D000-$DFFF is always the first bank. The remaining banks are exposed in virtual memory above $10000.
-            RA_InstallMemoryBank(0, ByteReader, ByteWriter, 0xE000);                        // Direct mapping ($0000-$DFFF)
-            RA_InstallMemoryBank(1, PostRAMByteReader, PostRAMByteWriter, 0x2000);          // Echo RAM + controller registers ($E000-$FFFF)
-            RA_InstallMemoryBank(2, GBCBankedRAMReader, GBCBankedRAMWriter, 0x6000);        // RAM banks 2-7 ($10000-$15FFF)
+            // Note that echo RAM does not fix bank 1 into $F000-$FFFF. But achievements shouldn't be using echo RAM anyway.
+            RA_InstallMemoryBank(0, ByteReader, ByteWriter, 0xD000);                        // Direct mapping ($0000-$CFFF)
+            RA_InstallMemoryBank(1, GBCBank1RAMReader, GBCBank1RAMWriter, 0x1000);          // RAM bank 1 ($D000-$DFFF)
+            RA_InstallMemoryBank(2, PostRAMByteReader, PostRAMByteWriter, 0x2000);          // Echo RAM + controller registers ($E000-$FFFF)
+            RA_InstallMemoryBank(3, GBCBankedRAMReader, GBCBankedRAMWriter, 0x6000);        // RAM banks 2-7 ($10000-$15FFF)
             break;
 
         case GBA:
