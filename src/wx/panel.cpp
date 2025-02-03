@@ -441,7 +441,7 @@ void GameArea::LoadGame(const wxString& name)
         emusys = &GBASystem;
 
 #ifdef RETROACHIEVEMENTS
-        RA_OnLoadNewRom(GBA, rom, rom_size, loaded_game.GetName().c_str());
+        RA_OnLoadNewRom(GBA, g_rom, rom_size, loaded_game.GetName().c_str());
 #endif
     }
 

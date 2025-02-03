@@ -139,6 +139,17 @@ if(TRANSLATIONS_ONLY)
     return()
 endif()
 
+option(ENABLE_RETROACHIEVEMENTS "Enable RetroAchievements" OFF)
+if (ENABLE_RETROACHIEVEMENTS)
+    add_definitions(-DRETROACHIEVEMENTS)
+    set(VBAM_WX_COMMON ${VBAM_WX_COMMON}
+        retroachievements.cpp
+        retroachievements.h
+        ../../RAInterface/RA_Interface.cpp
+        ${VBAM_GENERATED_DIR}/RA_BuildVer.h
+    )
+endif()
+
 # wxWidgets configuration.
 set(wxWidgets_USE_UNICODE ON)
 if(CMAKE_BUILD_TYPE MATCHES "^(Debug|RelWithDebInfo)$")
@@ -654,13 +665,6 @@ list(APPEND VBAM_LOCALIZABLE_FILES
     ${CMAKE_SOURCE_DIR}/src/core/gba/gbaLink.cpp
 )
 
-option(ENABLE_RETROACHIEVEMENTS "Enable RetroAchievements" OFF)
-if (ENABLE_RETROACHIEVEMENTS)
-    add_definitions(-DRETROACHIEVEMENTS)
-    set(SRC_WX ${SRC_WX} retroachievements.cpp ../../RAInterface/RA_Interface.cpp)
-    set(HDR_WX ${HDR_WX} retroachievements.h ../../RAInterface/RA_Interface.cpp)
-endif()
-
 if(APPLE)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
     set(CMAKE_INSTALL_RPATH "@loader_path/../Frameworks")
@@ -737,14 +741,17 @@ if (ENABLE_RETROACHIEVEMENTS)
     set_target_properties(visualboyadvance-m PROPERTIES OUTPUT_NAME RAVisualBoyAdvance-M)
     target_link_libraries(visualboyadvance-m winhttp)
 
-    if (CMAKE_HOST_SYSTEM_NAME STREQUAL Windows)
-        add_custom_command(TARGET visualboyadvance-m PRE_BUILD
-            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/MakeBuildVer.bat ${CMAKE_CURRENT_SOURCE_DIR}/RA_BuildVer.h RAVBAM RAVBA
+    if (CMAKE_HOST_SYSTEM_NAME STREQUAL Windows) # bat file doesn't run correctly when cross-compiling
+        add_custom_command(
+            OUTPUT ${VBAM_GENERATED_DIR}/RA_BuildVer.h
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/MakeBuildVer.bat ${VBAM_GENERATED_DIR}/RA_BuildVer.h RAVBAM RAVBA
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/MakeBuildVer.bat
         )
 
         add_custom_command(TARGET visualboyadvance-m POST_BUILD
             # TODO: figure out why ${CMAKE_BINARY_DIR} works for FILE(COPY, but not for COMMAND
-            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/CopyOverlay.bat ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}
+            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../../RAInterface/CopyOverlay.bat ${CMAKE_BINARY_DIR}
         )
     endif()
 endif()

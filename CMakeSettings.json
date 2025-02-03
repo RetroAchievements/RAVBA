@@ -90,6 +90,26 @@
       "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\build\\${name}",
       "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
       "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=arm64-windows-static -DENABLE_SDL=TRUE"
+    }, {
+      "name": "x64-static-Debug-RetroAchievements",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "inheritEnvironments": [
+        "msvc_x64"
+       ],
+      "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\build\\${name}",
+      "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
+      "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=x64-windows-static -DENABLE_SDL=TRUE -DENABLE_RETROACHIEVEMENTS=TRUE -DENABLE_FFMPEG=FALSE -DENABLE_ONLINEUPDATES=FALSE"
+    }, {
+      "name": "x64-static-Release-RetroAchievements",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [
+        "msvc_x64"
+       ],
+      "buildRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\build\\${name}",
+      "installRoot": "${env.USERPROFILE}\\CMakeBuilds\\${workspaceHash}\\install\\${name}",
+      "cmakeCommandArgs": "-DVCPKG_TARGET_TRIPLET=x64-windows-static -DENABLE_SDL=TRUE -DENABLE_RETROACHIEVEMENTS=TRUE -DENABLE_FFMPEG=FALSE -DENABLE_ONLINEUPDATES=FALSE"
     }
   ]
 }
