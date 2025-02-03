@@ -16,91 +16,107 @@
 // along with this program; if not, write to the Free Software Foundation,
 // Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-//OpenGL library
-#if (defined _MSC_VER)
-#pragma comment(lib, "OpenGL32")
-#include <windows.h>
-#endif
-
 #include <cmath>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+
 #include <sys/stat.h>
 #include <sys/types.h>
-#ifdef __APPLE__
-#include <OpenGL/OpenGL.h>
-#include <OpenGL/glext.h>
-#include <OpenGL/glu.h>
-#else
-#include <GL/gl.h>
-#include <GL/glext.h>
-#include <GL/glu.h>
-#endif
 
-#include <time.h>
+// System includes.
+#ifdef _WIN32
 
-#include "../common/version_cpp.h"
-
-#include "SDL.h"
-
-#include "../Util.h"
-#include "../common/Patch.h"
-#include "../gb/gb.h"
-#include "../gb/gbCheats.h"
-#include "../gb/gbGlobals.h"
-#include "../gb/gbSound.h"
-#include "../gba/Cheats.h"
-#include "../gba/Flash.h"
-#include "../gba/GBA.h"
-#include "../gba/RTC.h"
-#include "../gba/Sound.h"
-#include "../gba/agbprint.h"
-
-#include "../common/SoundSDL.h"
-
-#include "ConfigManager.h"
-#include "filters.h"
-#include "inputSDL.h"
-#include "text.h"
-
-// from: https://stackoverflow.com/questions/7608714/why-is-my-pointer-not-null-after-free
-#define freeSafe(ptr) free(ptr); ptr = NULL;
-
-#ifndef _WIN32
-#include <unistd.h>
-#define GETCWD getcwd
-#else // _WIN32
 #include <direct.h>
 #include <io.h>
-#define GETCWD _getcwd
+
+#define getcwd _getcwd
 #define snprintf sprintf
 #define stat _stat
 #define access _access
+
 #ifndef W_OK
     #define W_OK 2
 #endif
 #define mkdir(X,Y) (_mkdir(X))
+
 // from: https://www.linuxquestions.org/questions/programming-9/porting-to-win32-429334/
 #ifndef S_ISDIR
     #define S_ISDIR(mode)  (((mode) & _S_IFMT) == _S_IFDIR)
 #endif
+
 #endif // _WIN32
 
 #ifndef __GNUC__
+
 #define HAVE_DECL_GETOPT 0
 #define __STDC__ 1
 #include "getopt.h"
+
 #else // ! __GNUC__
+
 #define HAVE_DECL_GETOPT 1
 #include <getopt.h>
+
 #endif // ! __GNUC__
 
-#if WITH_LIRC
+// OpenGL library.
+#if defined(_WIN32)
+
+#pragma comment(lib, "OpenGL32")
+#include <Windows.h>
+
+#define strdup _strdup
+
+#endif  // defined(_WIN32)
+
+#if defined(__APPLE__)
+
+#include <OpenGL/OpenGL.h>
+#include <OpenGL/glext.h>
+#include <OpenGL/glu.h>
+
+#else  // !defined(__APPLE__)
+
+#include <GL/gl.h>
+#include <GL/glext.h>
+#include <GL/glu.h>
+
+#endif  // defined(__APPLE__)
+
+#include <SDL.h>
+
+#if defined(VBAM_ENABLE_LIRC)
 #include <lirc/lirc_client.h>
 #include <sys/poll.h>
 #endif
+
+#include "components/draw_text/draw_text.h"
+#include "components/filters_agb/filters_agb.h"
+#include "components/user_config/user_config.h"
+#include "core/base/file_util.h"
+#include "core/base/message.h"
+#include "core/base/patch.h"
+#include "core/base/version.h"
+#include "core/gb/gb.h"
+#include "core/gb/gbCheats.h"
+#include "core/gb/gbGlobals.h"
+#include "core/gb/gbSound.h"
+#include "core/gba/gba.h"
+#include "core/gba/gbaCheats.h"
+#include "core/gba/gbaFlash.h"
+#include "core/gba/gbaGlobals.h"
+#include "core/gba/gbaRtc.h"
+#include "core/gba/gbaSound.h"
+#include "sdl/ConfigManager.h"
+#include "sdl/audio_sdl.h"
+#include "sdl/filters.h"
+#include "sdl/inputSDL.h"
+
+// from: https://stackoverflow.com/questions/7608714/why-is-my-pointer-not-null-after-free
+#define freeSafe(ptr) free(ptr); ptr = NULL;
 
 extern void remoteInit();
 extern void remoteCleanUp();
@@ -239,8 +255,8 @@ int sdlMirroringEnable = 1;
 void systemConsoleMessage(const char*);
 
 char* home;
-char homeConfigDir[1024];
-char homeDataDir[1024];
+char homeConfigDir[1024] = "";
+char homeDataDir[1024] = "";
 
 bool screenMessage = false;
 char screenMessageBuffer[21];
@@ -268,7 +284,7 @@ static void sdlChangeVolume(float d)
     }
 }
 
-#if WITH_LIRC
+#if defined(VBAM_ENABLE_LIRC)
 //LIRC code
 bool LIRCEnabled = false;
 int LIRCfd = 0;
@@ -286,7 +302,7 @@ void StartLirc(void)
         fprintf(stdout, "Success\n");
         //read the config file
         char LIRCConfigLoc[2048];
-        sprintf(LIRCConfigLoc, "%s%c%s", homeConfigDir, FILE_SEP, "lircrc");
+        sprintf(LIRCConfigLoc, "%s%c%s", homeConfigDir, kFileSep, "lircrc");
         fprintf(stdout, "LIRC Config file:");
         if (lirc_readconfig(LIRCConfigLoc, &LIRCConfigInfo, NULL) == 0) {
             //check vbam dir for lircrc
@@ -348,7 +364,7 @@ bool sdlCheckDirectory(const char* dir)
 char* sdlGetFilename(const char* name)
 {
     char path[1024];
-    const char *filename = strrchr(name, FILE_SEP);
+    const char *filename = strrchr(name, kFileSep);
     if (filename)
         strcpy(path, filename + 1);
     else
@@ -359,7 +375,7 @@ char* sdlGetFilename(const char* name)
 char* sdlGetFilePath(const char* name)
 {
     char path[1024];
-    const char *filename = strrchr(name, FILE_SEP);
+    const char *filename = strrchr(name, kFileSep);
     if (filename) {
         size_t length = strlen(name) - strlen(filename);
         memcpy(path, name, length);
@@ -367,7 +383,7 @@ char* sdlGetFilePath(const char* name)
     }
     else {
         path[0] = '.';
-        path[1] = FILE_SEP;
+        path[1] = kFileSep;
         path[2] = '\0';
     }
     return strdup(path);
@@ -380,17 +396,17 @@ FILE* sdlFindFile(const char* name)
 
 #ifdef _WIN32
 #define PATH_SEP ";"
-#define FILE_SEP '\\'
+#define kFileSep '\\'
 #define EXE_NAME "vbam.exe"
 #else // ! _WIN32
 #define PATH_SEP ":"
-#define FILE_SEP '/'
+#define kFileSep '/'
 #define EXE_NAME "vbam"
 #endif // ! _WIN32
 
     fprintf(stdout, "Searching for file %s\n", name);
 
-    if (GETCWD(buffer, sizeof(buffer))) {
+    if (getcwd(buffer, sizeof(buffer))) {
         fprintf(stdout, "Searching current directory: %s\n", buffer);
     }
 
@@ -399,9 +415,9 @@ FILE* sdlFindFile(const char* name)
         return f;
     }
 
-    if (homeDataDir) {
+    if (strlen(homeDataDir)) {
         fprintf(stdout, "Searching home directory: %s\n", homeDataDir);
-        sprintf(path, "%s%c%s", homeDataDir, FILE_SEP, name);
+        sprintf(path, "%s%c%s", homeDataDir, kFileSep, name);
         f = fopen(path, "r");
         if (f != NULL)
             return f;
@@ -411,7 +427,7 @@ FILE* sdlFindFile(const char* name)
     char* profileDir = getenv("USERPROFILE");
     if (profileDir != NULL) {
         fprintf(stdout, "Searching user profile directory: %s\n", profileDir);
-        sprintf(path, "%s%c%s", profileDir, FILE_SEP, name);
+        sprintf(path, "%s%c%s", profileDir, kFileSep, name);
         f = fopen(path, "r");
         if (f != NULL)
             return f;
@@ -427,12 +443,12 @@ FILE* sdlFindFile(const char* name)
             char* tok = strtok(buffer, PATH_SEP);
 
             while (tok) {
-                sprintf(path, "%s%c%s", tok, FILE_SEP, EXE_NAME);
+                sprintf(path, "%s%c%s", tok, kFileSep, EXE_NAME);
                 f = fopen(path, "r");
                 if (f != NULL) {
                     char path2[2048];
                     fclose(f);
-                    sprintf(path2, "%s%c%s", tok, FILE_SEP, name);
+                    sprintf(path2, "%s%c%s", tok, kFileSep, name);
                     f = fopen(path2, "r");
                     if (f != NULL) {
                         fprintf(stdout, "Found at %s\n", path2);
@@ -446,10 +462,10 @@ FILE* sdlFindFile(const char* name)
         // executable is relative to some directory
         fprintf(stdout, "Searching executable directory\n");
         strcpy(buffer, home);
-        char* p = strrchr(buffer, FILE_SEP);
+        char* p = strrchr(buffer, kFileSep);
         if (p) {
             *p = 0;
-            sprintf(path, "%s%c%s", buffer, FILE_SEP, name);
+            sprintf(path, "%s%c%s", buffer, kFileSep, name);
             f = fopen(path, "r");
             if (f != NULL)
                 return f;
@@ -457,13 +473,13 @@ FILE* sdlFindFile(const char* name)
     }
 #else // ! _WIN32
     fprintf(stdout, "Searching data directory: %s\n", PKGDATADIR);
-    sprintf(path, "%s%c%s", PKGDATADIR, FILE_SEP, name);
+    sprintf(path, "%s%c%s", PKGDATADIR, kFileSep, name);
     f = fopen(path, "r");
     if (f != NULL)
         return f;
 
     fprintf(stdout, "Searching system config directory: %s\n", SYSCONF_INSTALL_DIR);
-    sprintf(path, "%s%c%s", SYSCONF_INSTALL_DIR, FILE_SEP, name);
+    sprintf(path, "%s%c%s", SYSCONF_INSTALL_DIR, kFileSep, name);
     f = fopen(path, "r");
     if (f != NULL)
         return f;
@@ -552,10 +568,10 @@ static void sdlApplyPerImagePreferences()
 
     char buffer[7];
     buffer[0] = '[';
-    buffer[1] = rom[0xac];
-    buffer[2] = rom[0xad];
-    buffer[3] = rom[0xae];
-    buffer[4] = rom[0xaf];
+    buffer[1] = g_rom[0xac];
+    buffer[2] = g_rom[0xad];
+    buffer[3] = g_rom[0xae];
+    buffer[4] = g_rom[0xaf];
     buffer[5] = ']';
     buffer[6] = 0;
 
@@ -651,11 +667,11 @@ static char* sdlStateName(int num)
     char *gameFile = sdlGetFilename(filename);
 
     if (saveDir)
-        sprintf(stateName, "%s%c%s%d.sgm", saveDir, FILE_SEP, gameFile, num + 1);
+        sprintf(stateName, "%s%c%s%d.sgm", saveDir, kFileSep, gameFile, num + 1);
     else if (access(gameDir, W_OK) == 0)
-        sprintf(stateName, "%s%c%s%d.sgm", gameDir, FILE_SEP, gameFile, num + 1);
+        sprintf(stateName, "%s%c%s%d.sgm", gameDir, kFileSep, gameFile, num + 1);
     else
-        sprintf(stateName, "%s%c%s%d.sgm", homeDataDir, FILE_SEP, gameFile, num + 1);
+        sprintf(stateName, "%s%c%s%d.sgm", homeDataDir, kFileSep, gameFile, num + 1);
 
     freeSafe(gameDir);
     freeSafe(gameFile);
@@ -754,11 +770,11 @@ void sdlWriteBattery()
     char *gameFile = sdlGetFilename(filename);
 
     if (batteryDir)
-        sprintf(buffer, "%s%c%s.sav", batteryDir, FILE_SEP, gameFile);
+        sprintf(buffer, "%s%c%s.sav", batteryDir, kFileSep, gameFile);
     else if (access(gameDir, W_OK) == 0)
-        sprintf(buffer, "%s%c%s.sav", gameDir, FILE_SEP, gameFile);
+        sprintf(buffer, "%s%c%s.sav", gameDir, kFileSep, gameFile);
     else
-        sprintf(buffer, "%s%c%s.sav", homeDataDir, FILE_SEP, gameFile);
+        sprintf(buffer, "%s%c%s.sav", homeDataDir, kFileSep, gameFile);
 
     bool result = emulator.emuWriteBattery(buffer);
 
@@ -776,11 +792,11 @@ void sdlReadBattery()
     char *gameFile = sdlGetFilename(filename);
 
     if (batteryDir)
-        sprintf(buffer, "%s%c%s.sav", batteryDir, FILE_SEP, gameFile);
+        sprintf(buffer, "%s%c%s.sav", batteryDir, kFileSep, gameFile);
     else if (access(gameDir, W_OK) == 0)
-        sprintf(buffer, "%s%c%s.sav", gameDir, FILE_SEP, gameFile);
+        sprintf(buffer, "%s%c%s.sav", gameDir, kFileSep, gameFile);
     else
-        sprintf(buffer, "%s%c%s.sav", homeDataDir, FILE_SEP, gameFile);
+        sprintf(buffer, "%s%c%s.sav", homeDataDir, kFileSep, gameFile);
 
     bool result = emulator.emuReadBattery(buffer);
 
@@ -1325,7 +1341,7 @@ void sdlPollEvents()
     }
 }
 
-#if WITH_LIRC
+#if defined(VBAM_ENABLE_LIRC)
 void lircCheckInput(void)
 {
     if (LIRCEnabled) {
@@ -1554,7 +1570,7 @@ void SetHomeDataDir()
 
 int main(int argc, char** argv)
 {
-    fprintf(stdout, "%s\n", vba_name_and_subversion);
+    fprintf(stdout, "%s\n", kVbamNameAndSubversion.c_str());
 
     home = argv[0];
     SetHome(home);
@@ -1737,7 +1753,7 @@ int main(int argc, char** argv)
             failed = (size == 0);
             if (!failed) {
                 if (coreOptions.cpuSaveType == 0)
-                    utilGBAFindSave(size);
+                    flashDetectSaveType(size);
                 else
                     coreOptions.saveType = coreOptions.cpuSaveType;
 
@@ -1752,7 +1768,7 @@ int main(int argc, char** argv)
                 int patchnum;
                 for (patchnum = 0; patchnum < patchNum; patchnum++) {
                     fprintf(stdout, "Trying patch %s%s\n", patchNames[patchnum],
-                        applyPatch(patchNames[patchnum], &rom, &size) ? " [success]" : "");
+                        applyPatch(patchNames[patchnum], &g_rom, &size) ? " [success]" : "");
                 }
                 CPUReset();
             }
@@ -1766,15 +1782,15 @@ int main(int argc, char** argv)
         soundInit();
         cartridgeType = 0;
         strcpy(filename, "gnu_stub");
-        rom = (uint8_t*)malloc(0x2000000);
-        workRAM = (uint8_t*)calloc(1, 0x40000);
-        bios = (uint8_t*)calloc(1, 0x4000);
-        internalRAM = (uint8_t*)calloc(1, 0x8000);
-        paletteRAM = (uint8_t*)calloc(1, 0x400);
-        vram = (uint8_t*)calloc(1, 0x20000);
-        oam = (uint8_t*)calloc(1, 0x400);
-        pix = (uint8_t*)calloc(1, 4 * 241 * 162);
-        ioMem = (uint8_t*)calloc(1, 0x400);
+        g_rom = (uint8_t*)malloc(0x2000000);
+        g_workRAM = (uint8_t*)calloc(1, 0x40000);
+        g_bios = (uint8_t*)calloc(1, 0x4000);
+        g_internalRAM = (uint8_t*)calloc(1, 0x8000);
+        g_paletteRAM = (uint8_t*)calloc(1, 0x400);
+        g_vram = (uint8_t*)calloc(1, 0x20000);
+        g_oam = (uint8_t*)calloc(1, 0x400);
+        g_pix = (uint8_t*)calloc(1, 4 * 241 * 162);
+        g_ioMem = (uint8_t*)calloc(1, 0x400);
 
         emulator = GBASystem;
 
@@ -1798,7 +1814,7 @@ int main(int argc, char** argv)
         systemMessage(0, "Failed to init joystick support: %s", SDL_GetError());
     }
 
-#if WITH_LIRC
+#if defined(VBAM_ENABLE_LIRC)
     StartLirc();
 #endif
     inputInitJoysticks();
@@ -1847,7 +1863,7 @@ int main(int argc, char** argv)
 
     fprintf(stdout, "Color depth: %d\n", systemColorDepth);
 
-    utilUpdateSystemColorMaps();
+    gbafilter_update_colors();
 
     if (delta == NULL) {
         delta = (uint8_t*)malloc(delta_size);
@@ -1900,7 +1916,7 @@ int main(int argc, char** argv)
             SDL_Delay(500);
         }
         sdlPollEvents();
-#if WITH_LIRC
+#if defined(VBAM_ENABLE_LIRC)
         lircCheckInput();
 #endif
         if (mouseCounter) {
@@ -1919,7 +1935,7 @@ int main(int argc, char** argv)
         SDL_GL_DeleteContext(glcontext);
     }
 
-    if (gbRom != NULL || rom != NULL) {
+    if (gbRom != NULL || g_rom != NULL) {
         sdlWriteBattery();
         emulator.emuCleanUp();
     }
@@ -1938,7 +1954,7 @@ int main(int argc, char** argv)
         free(patchNames[i]);
     }
 
-#if WITH_LIRC
+#if defined(VBAM_ENABLE_LIRC)
     StopLirc();
 #endif
 
@@ -2002,9 +2018,9 @@ void systemDrawScreen()
     }
 
     if (ifbFunction)
-        ifbFunction(pix + srcPitch, srcPitch, sizeX, sizeY);
+        ifbFunction(g_pix + srcPitch, srcPitch, sizeX, sizeY);
 
-    filterFunction(pix + srcPitch, srcPitch, delta, screen,
+    filterFunction(g_pix + srcPitch, srcPitch, delta, screen,
         destPitch, sizeX, sizeY);
 
     if (openGL) {
@@ -2145,20 +2161,20 @@ void systemScreenCapture(int a)
 
     if (captureFormat) {
         if (screenShotDir)
-            sprintf(buffer, "%s%c%s%02d.bmp", screenShotDir, FILE_SEP, gameFile, a);
+            sprintf(buffer, "%s%c%s%02d.bmp", screenShotDir, kFileSep, gameFile, a);
         else if (access(gameDir, W_OK) == 0)
-            sprintf(buffer, "%s%c%s%02d.bmp", gameDir, FILE_SEP, gameFile, a);
+            sprintf(buffer, "%s%c%s%02d.bmp", gameDir, kFileSep, gameFile, a);
         else
-            sprintf(buffer, "%s%c%s%02d.bmp", homeDataDir, FILE_SEP, gameFile, a);
+            sprintf(buffer, "%s%c%s%02d.bmp", homeDataDir, kFileSep, gameFile, a);
 
         result = emulator.emuWriteBMP(buffer);
     } else {
         if (screenShotDir)
-            sprintf(buffer, "%s%c%s%02d.png", screenShotDir, FILE_SEP, gameFile, a);
+            sprintf(buffer, "%s%c%s%02d.png", screenShotDir, kFileSep, gameFile, a);
         else if (access(gameDir, W_OK) == 0)
-            sprintf(buffer, "%s%c%s%02d.png", gameDir, FILE_SEP, gameFile, a);
+            sprintf(buffer, "%s%c%s%02d.png", gameDir, kFileSep, gameFile, a);
         else
-            sprintf(buffer, "%s%c%s%02d.png", homeDataDir, FILE_SEP, gameFile, a);
+            sprintf(buffer, "%s%c%s%02d.png", homeDataDir, kFileSep, gameFile, a);
 
         result = emulator.emuWritePNG(buffer);
     }
@@ -2302,11 +2318,10 @@ uint8_t systemGetSensorDarkness()
     return 0xE8;
 }
 
-SoundDriver* systemSoundInit()
-{
+std::unique_ptr<SoundDriver> systemSoundInit() {
     soundShutdown();
 
-    return new SoundSDL();
+    return std::make_unique<SoundSDL>();
 }
 
 void systemOnSoundShutdown()

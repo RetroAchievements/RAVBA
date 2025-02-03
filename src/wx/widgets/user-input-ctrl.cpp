@@ -1,32 +1,19 @@
-#include "widgets/user-input-ctrl.h"
+#include "wx/widgets/user-input-ctrl.h"
 
-#include "config/user-input.h"
+#include <wx/time.h>
 
-#include "opts.h"
+#include "core/base/check.h"
+#include "wx/config/user-input.h"
+#include "wx/widgets/user-input-event.h"
 
 namespace widgets {
 
 namespace {
 
-int FilterKeyCode(const wxKeyEvent& event) {
-    const wxChar keycode = event.GetUnicodeKey();
-    if (keycode == WXK_NONE) {
-        return event.GetKeyCode();
-    }
-
-    if (keycode < 32) {
-        switch (keycode) {
-            case WXK_BACK:
-            case WXK_TAB:
-            case WXK_RETURN:
-            case WXK_ESCAPE:
-                return keycode;
-            default:
-                return WXK_NONE;
-        }
-    }
-
-    return keycode;
+// Helper callback to disable an event. This is bound dynmically to prevent
+// the event from being processed by the base class.
+void DisableEvent(wxEvent& event) {
+    event.Skip(false);
 }
 
 }  // namespace
@@ -37,24 +24,32 @@ UserInputCtrl::UserInputCtrl() : wxTextCtrl() {}
 
 UserInputCtrl::UserInputCtrl(wxWindow* parent,
                              wxWindowID id,
-                             const wxString& value,
                              const wxPoint& pos,
                              const wxSize& size,
                              long style,
                              const wxString& name) {
-    Create(parent, id, value, pos, size, style, name);
+    Create(parent, id, pos, size, style, name);
 }
 
 UserInputCtrl::~UserInputCtrl() = default;
 
 bool UserInputCtrl::Create(wxWindow* parent,
                            wxWindowID id,
-                           const wxString& value,
                            const wxPoint& pos,
                            const wxSize& size,
                            long style,
                            const wxString& name) {
-    return wxTextCtrl::Create(parent, id, value, pos, size, style, wxValidator(), name);
+    this->Bind(VBAM_EVT_USER_INPUT, &UserInputCtrl::OnUserInput, this);
+    this->Bind(wxEVT_SET_FOCUS, [this](wxFocusEvent& event) {
+        last_focus_time_ = wxGetUTCTimeMillis();
+        event.Skip();
+    });
+
+    // Diable key events.
+    this->Bind(wxEVT_CHAR, &DisableEvent);
+    this->Bind(wxEVT_KEY_DOWN, &DisableEvent);
+
+    return wxTextCtrl::Create(parent, id, wxEmptyString, pos, size, style, wxValidator(), name);
 }
 
 void UserInputCtrl::SetMultiKey(bool multikey) {
@@ -62,13 +57,14 @@ void UserInputCtrl::SetMultiKey(bool multikey) {
     Clear();
 }
 
-void UserInputCtrl::SetInputs(const std::set<config::UserInput>& inputs) {
-    inputs_ = inputs;
+void UserInputCtrl::SetInputs(const std::unordered_set<config::UserInput>& inputs) {
+    inputs_.clear();
+    inputs_.insert(inputs.begin(), inputs.end());
     UpdateText();
 }
 
 config::UserInput UserInputCtrl::SingleInput() const {
-    assert(!is_multikey_);
+    VBAM_CHECK(!is_multikey_);
     if (inputs_.empty()) {
         return config::UserInput();
     }
@@ -82,28 +78,20 @@ void UserInputCtrl::Clear() {
 
 wxIMPLEMENT_DYNAMIC_CLASS(UserInputCtrl, wxTextCtrl);
 
-// clang-format off
-wxBEGIN_EVENT_TABLE(UserInputCtrl, wxTextCtrl)
-    EVT_SDLJOY(UserInputCtrl::OnJoy)
-    EVT_KEY_DOWN(UserInputCtrl::OnKeyDown)
-    EVT_KEY_UP(UserInputCtrl::OnKeyUp)
-wxEND_EVENT_TABLE();
-// clang-format on
+void UserInputCtrl::OnUserInput(UserInputEvent& event) {
+    // Find the first pressed input.
+    nonstd::optional<config::UserInput> input = event.FirstReleasedInput();
 
-void UserInputCtrl::OnJoy(wxJoyEvent& event) {
-    static wxLongLong last_event = 0;
-
-    // Filter consecutive axis motions within 300ms, as this adds two bindings
-    // +1/-1 instead of the one intended.
-    if ((event.control() == wxJoyControl::AxisPlus || event.control() == wxJoyControl::AxisMinus) &&
-        wxGetUTCTimeMillis() - last_event < 300) {
+    if (input == nonstd::nullopt) {
+        // No pressed inputs.
         return;
     }
 
-    last_event = wxGetUTCTimeMillis();
-
-    // Control was unpressed, ignore.
-    if (!event.pressed()) {
+    static const wxLongLong kInterval = 100;
+    if (wxGetUTCTimeMillis() - last_focus_time_ < kInterval) {
+        // Ignore events sent very shortly after focus. This is used to ignore
+        // some spurious joystick events like an accidental axis motion.
+        event.Skip();
         return;
     }
 
@@ -111,33 +99,7 @@ void UserInputCtrl::OnJoy(wxJoyEvent& event) {
         inputs_.clear();
     }
 
-    inputs_.emplace(event);
-    UpdateText();
-    Navigate();
-}
-
-void UserInputCtrl::OnKeyDown(wxKeyEvent& event) {
-    last_mod_ = event.GetModifiers();
-    last_key_ = FilterKeyCode(event);
-}
-
-void UserInputCtrl::OnKeyUp(wxKeyEvent&) {
-    const int mod = last_mod_;
-    const int key = last_key_;
-    last_mod_ = last_key_ = 0;
-
-    // key is only 0 if we missed the keydown event
-    // or if we are being shipped pseudo keypress events
-    // either way, just ignore.
-    if (!key) {
-        return;
-    }
-
-    if (!is_multikey_) {
-        inputs_.clear();
-    }
-
-    inputs_.emplace(key, mod);
+    inputs_.insert(std::move(input.value()));
     UpdateText();
     Navigate();
 }
@@ -154,32 +116,10 @@ void UserInputCtrl::UpdateText() {
     if (value.empty()) {
         SetValue(wxEmptyString);
     } else {
+        // Remove the trailing comma.
         SetValue(value.substr(0, value.size() - 1));
     }
 }
-
-UserInputCtrlValidator::UserInputCtrlValidator(const config::GameControl game_control) : wxValidator(), game_control_(game_control) {}
-
-wxObject* UserInputCtrlValidator::Clone() const {
-    return new UserInputCtrlValidator(game_control_);
-}
-
-bool UserInputCtrlValidator::TransferToWindow() {
-    UserInputCtrl* control = wxDynamicCast(GetWindow(), UserInputCtrl);
-    assert(control);
-
-    control->SetInputs(gopts.game_control_bindings[game_control_]);
-    return true;
-}
-
-bool UserInputCtrlValidator::TransferFromWindow() {
-    UserInputCtrl* control = wxDynamicCast(GetWindow(), UserInputCtrl);
-    assert(control);
-
-    gopts.game_control_bindings[game_control_] = control->inputs();
-    return true;
-}
-
 
 UserInputCtrlXmlHandler::UserInputCtrlXmlHandler() : wxXmlResourceHandler() {
     AddWindowStyles();
@@ -188,7 +128,7 @@ UserInputCtrlXmlHandler::UserInputCtrlXmlHandler() : wxXmlResourceHandler() {
 wxObject* UserInputCtrlXmlHandler::DoCreateResource() {
     XRC_MAKE_INSTANCE(control, UserInputCtrl)
 
-    control->Create(m_parentAsWindow, GetID(), GetText("value"), GetPosition(), GetSize(),
+    control->Create(m_parentAsWindow, GetID(), GetPosition(), GetSize(),
                     GetStyle() | wxTE_PROCESS_ENTER | wxTE_PROCESS_TAB, GetName());
     SetupWindow(control);
 

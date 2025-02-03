@@ -1,7 +1,6 @@
 #!/bin/sh
 
 CMAKE=cmake
-ENABLE_OPENAL=1
 ENABLE_FFMPEG=1
 
 main() {
@@ -24,10 +23,6 @@ check_command_line_args() {
             -h|--help|--usage)
                 usage
                 quit 0
-                ;;
-            --no-openal)
-                ENABLE_OPENAL=
-                shift
                 ;;
             --no-ffmpeg)
                 ENABLE_FFMPEG=
@@ -355,9 +350,8 @@ debian_installdeps() {
                 ;;
         esac
 
-        pkgs="build-essential g++ nasm cmake ccache gettext zlib1g-dev libgl1-mesa-dev libgettextpo-dev libsdl2-dev $sdl_lib libglu1-mesa-dev libglu1-mesa libgles2-mesa-dev libsfml-dev $sfml_libs $glew_lib $wx_libs libgtk2.0-dev libgtk-3-dev ccache zip ninja-build"
+        pkgs="build-essential g++ nasm cmake ccache gettext zlib1g-dev libgl1-mesa-dev libgettextpo-dev libsdl2-dev $sdl_lib libglu1-mesa-dev libglu1-mesa libgles2-mesa-dev libsfml-dev $sfml_libs $glew_lib $wx_libs libgtk2.0-dev libgtk-3-dev ccache zip ninja-build libopenal-dev"
 
-        [ -n "$ENABLE_OPENAL" ] && pkgs="$pkgs libopenal-dev"
         [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs libavcodec-dev libavformat-dev libswscale-dev libavutil-dev $libswresample_dev"
 
         check sudo apt-get -qy install $pkgs
@@ -407,8 +401,7 @@ debian_installdeps() {
             fi
         fi
 
-        deps="gcc zlib ffmpeg gettext sdl2 sfml openal wxwidgets"
-        [ -n "$ENABLE_OPENAL" ] && deps="$deps openal"
+        deps="gcc zlib ffmpeg gettext sdl2 sfml openal wxwidgets openal"
         [ -n "$ENABLE_FFMPEG" ] && deps="$deps ffmpeg"
 
         set --
@@ -510,9 +503,6 @@ fedora_installdeps() {
                 *ffmpeg*)
                     [ -z "$ENABLE_FFMPEG" ] && continue
                     ;;
-                *openal*)
-                    [ -z "$ENABLE_OPENAL" ] && continue
-                    ;;
             esac
 
             pkg_arch=
@@ -601,15 +591,9 @@ fedora_installdeps() {
                 ;;
         esac
         # install static deps
-        for pkg in zlib gettext SDL2 wxWidgets3; do
+        for pkg in zlib gettext SDL2 wxWidgets3 openal-soft; do
             set -- "$@" "${target}-${pkg}-static"
         done
-        # install deps that are not available as static
-        if [ -n "$ENABLE_OPENAL" ]; then
-            for pkg in openal-soft; do
-                set -- "$@" "${target}-${pkg}"
-            done
-        fi
 
         # get the necessary win32 headers
         git submodule update --init --remote --recursive
@@ -707,9 +691,6 @@ rhel_installdeps() {
                 *ffmpeg*)
                     [ -z "$ENABLE_FFMPEG" ] && continue
                     ;;
-                *openal*)
-                    [ -z "$ENABLE_OPENAL" ] && continue
-                    ;;
             esac
 
             if [ -n "$amd64" ]; then
@@ -790,15 +771,9 @@ rhel_installdeps() {
                 ;;
         esac
         # install static deps
-        for pkg in zlib gettext SDL2 wxWidgets; do
+        for pkg in zlib gettext SDL2 wxWidgets openal-soft; do
             set -- "$@" "${target}-${pkg}-static"
         done
-        # install deps that are not available as static
-        if [ -n "$ENABLE_OPENAL" ]; then
-            for pkg in openal-soft; do
-                set -- "$@" "${target}-${pkg}"
-            done
-        fi
 
         # get the necessary win32 headers
         git submodule update --init --remote --recursive
@@ -824,9 +799,8 @@ suse_installdeps() {
 
     tools="make cmake ccache nasm gettext-tools pkg-config ccache zip sfml2-devel ninja"
 
-    libs="gcc gcc-c++ libSDL2-devel wxWidgets-3_0-devel" # ffmpeg-devel
+    libs="gcc gcc-c++ libSDL2-devel wxWidgets-3_0-devel openal-soft-devel" # ffmpeg-devel
 
-    [ -n "$ENABLE_OPENAL" ] && libs="$libs openal-soft-devel"
     # ffmpeg requires packman repos
 
     if [ "$target" = m32 ]; then
@@ -894,9 +868,8 @@ archlinux_installdeps() {
 
     $pacman -Q gtk3-classic >/dev/null 2>&1 && gtk=gtk3-classic
 
-    libs="zlib mesa gettext sdl2 wxgtk3 $gtk sfml"
+    libs="zlib mesa gettext sdl2 wxgtk3 $gtk sfml openal"
 
-    [ -n "$ENABLE_OPENAL" ] && libs="$libs openal"
     [ -n "$ENABLE_FFMPEG" ] && libs="$libs ffmpeg"
 
     if [ -z "$target" -o "$target" = m32 ]; then
@@ -991,9 +964,7 @@ EOF
           fi
         done
 
-        deps="zlib gettext pkg-config sdl2 wxmsw"
-
-        [ -n "$ENABLE_OPENAL" ] && deps="$deps openal"
+        deps="zlib gettext pkg-config sdl2 wxmsw openal"
 
         # and the actual deps
         for p in $deps; do
@@ -1024,9 +995,7 @@ solus_installdeps() {
     check sudo eopkg -y install -c system.devel
     check sudo eopkg -y install git ccache ninja
 
-    set -- sdl2-devel wxwidgets-devel libgtk-2-devel libgtk-3-devel
-
-    [ -n "$ENABLE_OPENAL" ] && set -- "$@" openal-soft-devel
+    set -- sdl2-devel wxwidgets-devel libgtk-2-devel libgtk-3-devel libglu-devel openal-soft-devel
 
     if [ -n "$amd64" -a "$target" = m32 ]; then
         info_msg 'Calculating dependencies, this will take a while..'
@@ -1095,15 +1064,23 @@ gentoo_installdeps() {
     wx_slot=$(equery -qC list -p -F '$slot' x11-libs/wxGTK | grep gtk3 | sort -rV | head -1)
 
     ebuilds="\
-      sys-devel/gcc      sys-devel/make     dev-util/cmake          dev-util/ccache sys-devel/binutils \
-      media-libs/libsdl2 media-libs/libsfml x11-libs/wxGTK:$wx_slot sys-libs/zlib   dev-util/pkgconf \
-      dev-lang/nasm      dev-util/ninja"
-
-    [ -n "$ENABLE_OPENAL" ] && ebuilds="$ebuilds media-libs/openal"
+      sys-devel/gcc \
+      dev-build/make \
+      dev-build/cmake \
+      dev-util/ccache \
+      sys-devel/binutils \
+      media-libs/libsdl2 \
+      media-libs/libsfml \
+      media-libs/openal \
+      x11-libs/wxGTK:$wx_slot \
+      sys-libs/zlib \
+      dev-util/pkgconf \
+      dev-lang/nasm \
+      dev-build/ninja"
 
     [ -n "$ENABLE_FFMPEG" ] && ebuilds="$ebuilds media-video/ffmpeg"
 
-    check sudo emerge -vn $ebuilds
+    check sudo emerge -vna $ebuilds
 
     build_instructions
 }
@@ -1130,10 +1107,10 @@ windows_installdeps() {
 
     case "$target" in
         *clang*)
-            pkgs="lldb"
+            pkgs="lldb clang"
             ;;
         *)
-            pkgs="$pkgs gcc gcc-libs gcc-libgfortran"
+            pkgs="gcc gcc-libs gcc-libgfortran"
             ;;
     esac
 
@@ -1141,11 +1118,19 @@ windows_installdeps() {
         *i686*)
             pkgs="$pkgs nasm"
             ;;
+        *)
+            pkgs="$pkgs FAudio"
+            ;;
     esac
 
-    pkgs="$pkgs SDL2 sfml wxWidgets3.2 zlib binutils cmake crt-git extra-cmake-modules headers-git make pkgconf tools-git windows-default-manifest libmangle-git ninja gdb ccache"
+    pkgs="$pkgs SDL2 sfml wxWidgets3.2 zlib binutils cmake crt-git headers-git make pkgconf tools-git windows-default-manifest libmangle-git ninja gdb ccache openal"
 
-    [ -n "$ENABLE_OPENAL" ] && pkgs="$pkgs openal"
+    case "$target" in
+        *x86_64)
+            pkgs="$pkgs extra-cmake-modules"
+            ;;
+    esac
+
     [ -n "$ENABLE_FFMPEG" ] && pkgs="$pkgs ffmpeg"
 
     set --
@@ -1210,7 +1195,7 @@ brew_installdeps() {
 
     check brew -v update
 
-    brews="nasm cmake ccache gettext pkg-config sdl2 wxwidgets ccache ninja"
+    brews="nasm cmake ccache gettext pkg-config sdl2 wxwidgets faudio ccache ninja zlib"
 
     [ -n "$ENABLE_FFMPEG" ] && brews="$brews ffmpeg"
 

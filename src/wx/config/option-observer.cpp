@@ -1,6 +1,9 @@
-#include "config/option-observer.h"
+#include "wx/config/option-observer.h"
 
-#include "config/option.h"
+#include "core/base/check.h"
+#include "wx/config/option.h"
+
+#include "core/base/check.h"
 
 namespace config {
 
@@ -10,7 +13,7 @@ public:
     CallbackOptionObserver(const OptionID& option_id,
                            std::function<void(Option*)> callback)
         : Option::Observer(option_id), callback_(std::move(callback)) {
-        assert(callback_);
+        VBAM_CHECK(callback_);
     }
     ~CallbackOptionObserver() override = default;
 

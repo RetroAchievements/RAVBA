@@ -3,7 +3,7 @@
 
 #include <wx/validate.h>
 
-#include "config/option.h"
+#include "wx/config/option.h"
 
 #if wxCHECK_VERSION(3, 1, 1)
 #define WX_HAS_VALIDATOR_SET_WINDOW_OVERRIDE 1
@@ -85,7 +85,7 @@ private:
     void OnValueChanged() final;
 };
 
-// "Generic" validator for a wxChecBox or wxRadioButton widget with a kUnsigned
+// "Generic" validator for a wxCheckBox or wxRadioButton widget with a kUnsigned
 // Option. This will make sure the kUnsigned Option and the wxRadioButton or
 // wxCheckBox are kept in sync. The widget will be checked if the kUnsigned
 // Option matches the provided `value` parameter in the constructor.
@@ -106,12 +106,12 @@ private:
     const uint32_t value_;
 };
 
-// Validator for a wxSpinCtrl  widget with a kInt Option. This will keep the
-// kInt Option and the wxSpinCtrl selection in sync.
-class OptionSpinCtrlValidator : public OptionValidator {
+// Validator for a wxSpinCtrl or wxSlider widget with a kInt Option. This will
+// keep the kInt Option and the wxSpinCtrl or wxSlider selection in sync.
+class OptionIntValidator : public OptionValidator {
 public:
-    explicit OptionSpinCtrlValidator(config::OptionID option_id);
-    ~OptionSpinCtrlValidator() override = default;
+    explicit OptionIntValidator(config::OptionID option_id);
+    ~OptionIntValidator() override = default;
 
     // Returns a copy of the object.
     wxObject* Clone() const override;
@@ -123,12 +123,29 @@ private:
     bool WriteToOption() override;
 };
 
-// Validator for a wxChoice  widget with a kUnsigned Option. This will keep the
+// Validator for a wxChoice widget with a kUnsigned Option. This will keep the
 // kUnsigned Option and the wxChoice selection in sync.
 class OptionChoiceValidator : public OptionValidator {
 public:
     explicit OptionChoiceValidator(config::OptionID option_id);
     ~OptionChoiceValidator() override = default;
+
+    // Returns a copy of the object.
+    wxObject* Clone() const override;
+
+private:
+    // OptionValidator implementation.
+    bool IsWindowValueValid() override;
+    bool WriteToWindow() override;
+    bool WriteToOption() override;
+};
+
+// Validator for a wxCheckBox widgets with a kBool Option. This will keep the
+// kBool Option and the wxCheckBox selection in sync.
+class OptionBoolValidator : public OptionValidator {
+public:
+    explicit OptionBoolValidator(config::OptionID option_id);
+    ~OptionBoolValidator() override = default;
 
     // Returns a copy of the object.
     wxObject* Clone() const override;

@@ -1,27 +1,16 @@
-#ifndef WX_OPTS_H
-#define WX_OPTS_H
+#ifndef VBAM_WX_OPTS_H_
+#define VBAM_WX_OPTS_H_
 
-#include <map>
+#include <cstdint>
 
 #include <wx/string.h>
 #include <wx/vidmode.h>
 
-#include "config/game-control.h"
-#include "config/shortcuts.h"
-#include "config/user-input.h"
-#include "wxhead.h"
-
 // Forward declaration.
 class wxFileHistory;
 
-// Default joystick bindings.
-extern const std::map<config::GameControl, std::set<config::UserInput>>
-    kDefaultBindings;
-
 extern struct opts_t {
     opts_t();
-    // while I would normally put large objects in front to reduce gaps,
-    // I instead organized this by opts.cpp table order
 
     /// Display
     wxVideoMode fs_mode;
@@ -39,12 +28,7 @@ extern struct opts_t {
     int rewind_interval = 0;
 
     /// Joypad
-    std::map<config::GameControl, std::set<config::UserInput>>
-        game_control_bindings;
     int autofire_rate = 1;
-
-    /// Keyboard
-    config::Shortcuts shortcuts;
 
     /// Core
     int gdb_port = 55555;
@@ -52,23 +36,7 @@ extern struct opts_t {
     int max_scale = 0;
 
     /// Sound
-#ifdef __WXMSW__
-    int audio_api = AUD_XAUDIO2;
-#else
-    int audio_api = AUD_OPENAL;
-#endif
-    // 10 fixes stuttering on mac with openal, as opposed to 5
-    // also should be better for modern hardware in general
-    int audio_buffers = 10;
-    wxString audio_dev;
     int sound_en = 0x30f; // soundSetEnable()
-    int gba_sound_filter = 50;
-    int gb_echo = 20;
-    bool dsound_hw_accel;
-    int gb_stereo = 15;
-    int sound_qual = 1; // soundSetSampleRate() / gbSoundSetSampleRate()
-    int sound_vol = 100; // soundSetVolume()
-    bool upmix = false; // xa2 only
 
     /// Recent
     wxFileHistory* recent = nullptr;
@@ -88,11 +56,9 @@ void load_opts(bool first_time_launch);
 // call whenever opt vars change
 // will detect changes and write config if necessary
 void update_opts();
-// Updates the joypad options.
-void update_joypad_opts();
 // Updates the shortcut options.
 void update_shortcut_opts();
 // returns true if option name correct; prints error if val invalid
 void opt_set(const wxString& name, const wxString& val);
 
-#endif /* WX_OPTS_H */
+#endif // VBAM_WX_OPTS_H_

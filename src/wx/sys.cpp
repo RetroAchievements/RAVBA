@@ -6,10 +6,15 @@
 #include <wx/printdlg.h>
 #include <SDL.h>
 
-#include "../common/SoundSDL.h"
-#include "config/game-control.h"
-#include "config/option-proxy.h"
-#include "wxvbam.h"
+#include "core/base/image_util.h"
+#include "core/gb/gbGlobals.h"
+#include "core/gba/gbaGlobals.h"
+#include "core/gba/gbaSound.h"
+#include "wx/audio/audio.h"
+#include "wx/config/cmdtab.h"
+#include "wx/config/emulated-gamepad.h"
+#include "wx/config/option-proxy.h"
+#include "wx/wxvbam.h"
 
 #ifdef RETROACHIEVEMENTS
 #include "retroachievements.h"
@@ -85,7 +90,7 @@ void systemSendScreen()
 {
 #ifndef NO_FFMPEG
     GameArea* ga = wxGetApp().frame->GetPanel();
-    if (ga) ga->AddFrame(pix);
+    if (ga) ga->AddFrame(g_pix);
 #endif
 }
 
@@ -101,12 +106,12 @@ void systemDrawScreen()
 #ifndef NO_FFMPEG
 
     if (ga)
-        ga->AddFrame(pix);
+        ga->AddFrame(g_pix);
 
 #endif
 
     if (ga && ga->panel)
-        ga->panel->DrawArea(&pix);
+        ga->panel->DrawArea(&g_pix);
 }
 
 // record a game "movie"
@@ -279,7 +284,7 @@ void systemStartGamePlayback(const wxString& fname, MVFormatID format)
     if (fn.size() < 4 || !wxString(fn.substr(fn.size() - 4)).IsSameAs(wxT(".vmv"), false))
         fn.append(wxT(".vmv"));
 
-    uint32_t version;
+    uint32_t version = 0;
 
     if (!game_file.Open(fn, wxT("rb")) || game_file.Read(&version, sizeof(version)) != sizeof(version) || wxUINT32_SWAP_ON_BE(version) < 1 || wxUINT32_SWAP_ON_BE(version) > 2) {
         wxLogError(_("Cannot open recording file %s"), fname.c_str());
@@ -340,7 +345,7 @@ uint32_t systemReadJoypad(int joy)
     if (joy < 0 || joy > 3)
         joy = OPTION(kJoyDefault) - 1;
 
-    uint32_t ret = config::GameControlState::Instance().GetJoypad(joy);
+    uint32_t ret = wxGetApp().emulated_gamepad()->GetJoypad(joy);
 
     if (turbo)
         ret |= KEYM_SPEED;
@@ -600,7 +605,7 @@ uint32_t systemGetClock()
 
 void systemCartridgeRumble(bool b)
 {
-    wxGetApp().frame->SetJoystickRumble(b);
+    wxGetApp().sdl_poller()->SetRumble(b);
 }
 
 static uint8_t sensorDarkness = 0xE8; // total darkness (including daylight on rainy days)
@@ -666,8 +671,7 @@ void systemUpdateSolarSensor()
 void systemUpdateMotionSensor()
 {
     for (int i = 0; i < 4; i++) {
-        const uint32_t joy_value =
-            config::GameControlState::Instance().GetJoypad(i);
+        const uint32_t joy_value = wxGetApp().emulated_gamepad()->GetJoypad(i);
 
         if (!sensorx[i])
             sensorx[i] = 2047;
@@ -1230,38 +1234,10 @@ void systemGbBorderOn()
 }
 
 class SoundDriver;
-SoundDriver* systemSoundInit()
+std::unique_ptr<SoundDriver> systemSoundInit()
 {
     soundShutdown();
-
-    switch (gopts.audio_api) {
-    case AUD_SDL:
-        return new SoundSDL();
-#ifndef NO_OAL
-
-    case AUD_OPENAL:
-        return newOpenAL();
-#endif
-#ifdef __WXMSW__
-
-    case AUD_DIRECTSOUND:
-        return newDirectSound();
-#ifndef NO_XAUDIO2
-
-    case AUD_XAUDIO2:
-        return newXAudio2_Output();
-#endif
-#ifndef NO_FAUDIO
-    case AUD_FAUDIO:
-        return newFAudio_Output();
-#endif
-#endif
-
-    default:
-        gopts.audio_api = 0;
-    }
-
-    return 0;
+    return audio::CreateSoundDriver(OPTION(kSoundAudioAPI));
 }
 
 void systemOnWriteDataToSoundBuffer(const uint16_t* finalWave, int length)
@@ -1281,7 +1257,7 @@ void systemOnSoundShutdown()
 {
 }
 
-#ifndef NO_DEBUGGER
+#if defined(VBAM_ENABLE_DEBUGGER)
 
 extern int (*remoteSendFnc)(char*, int);
 extern int (*remoteRecvFnc)(char*, int);
@@ -1447,7 +1423,7 @@ bool debugWaitSocket()
     return debug_remote != NULL;
 }
 
-#endif
+#endif  // defined(VBAM_ENABLE_DEBUGGER)
 
 void log(const char* defaultMsg, ...)
 {
@@ -1460,7 +1436,7 @@ void log(const char* defaultMsg, ...)
     wxGetApp().log.append(msg);
 
     if (wxGetApp().IsMainLoopRunning()) {
-        LogDialog* d = wxGetApp().frame->logdlg;
+        LogDialog* d = wxGetApp().frame->logdlg.get();
 
         if (d && d->IsShown()) {
             d->Update();

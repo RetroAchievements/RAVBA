@@ -1,9 +1,5 @@
-if(POLICY CMP0012)
-    cmake_policy(SET CMP0012 NEW) # Saner if() behavior.
-endif()
-
-if(POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW) # Use timestamps from archives.
+if(TRANSLATIONS_ONLY)
+    return()
 endif()
 
 if(NOT DEFINED VCPKG_TARGET_TRIPLET)
@@ -79,7 +75,7 @@ endfunction()
 
 function(vcpkg_check_git_status git_status)
     # The VS vcpkg component cannot be written to without elevation.
-    if(NOT git_status EQUAL 0 AND NOT VCPKG_ROOT MATCHES "^C:/Program Files/Microsoft Visual Studio/")
+    if(NOT git_status EQUAL 0 AND NOT VCPKG_ROOT MATCHES "Visual Studio")
         message(FATAL_ERROR "Error updating vcpkg from git, please make sure git for windows is installed correctly, it can be installed from Visual Studio components")
     endif()
 endfunction()
@@ -146,7 +142,7 @@ function(vcpkg_is_installed vcpkg_exe pkg_name pkg_ver pkg_triplet powershell ou
     string(REPLACE "-" "." pkg_ver ${pkg_ver})
 
     if(NOT DEFINED VCPKG_INSTALLED_COUNT)
-        if(VCPKG_ROOT MATCHES "^C:/Program Files/Microsoft Visual Studio/")
+        if(VCPKG_ROOT MATCHES "Visual Studio")
             execute_process(
                 COMMAND ${powershell}
                     -executionpolicy bypass -noprofile
@@ -242,7 +238,7 @@ function(get_binary_packages vcpkg_exe)
 
     foreach(triplet ${triplets})
         file(
-            DOWNLOAD "https://nightly.vba-m.com/vcpkg/${triplet}/" "${CMAKE_BINARY_DIR}/binary_package_list_${triplet}.html"
+            DOWNLOAD "https://nightly.visualboyadvance-m.org/vcpkg/${triplet}/" "${CMAKE_BINARY_DIR}/binary_package_list_${triplet}.html"
             STATUS pkg_list_status
         )
         list(GET pkg_list_status 1 pkg_list_error)
@@ -277,12 +273,6 @@ function(get_binary_packages vcpkg_exe)
         FetchContent_Populate(vcpkg_binpkg)
     endif()
 
-    if(WIN32)
-        set(powershell powershell)
-    else()
-        set(powershell pwsh)
-    endif()
-
     unset(to_install)
     foreach(pkg ${binary_packages})
         if(NOT pkg MATCHES "([^_]+)_([^_]+)_([^.]+)[.]zip")
@@ -292,7 +282,7 @@ function(get_binary_packages vcpkg_exe)
         set(pkg_version ${CMAKE_MATCH_2})
         set(pkg_triplet ${CMAKE_MATCH_3})
 
-        vcpkg_is_installed(${vcpkg_exe} ${pkg_name} ${pkg_version} ${pkg_triplet} ${powershell} pkg_installed)
+        vcpkg_is_installed(${vcpkg_exe} ${pkg_name} ${pkg_version} ${pkg_triplet} ${POWERSHELL} pkg_installed)
 
         if(NOT pkg_installed)
             list(APPEND to_install ${pkg})
@@ -306,10 +296,10 @@ function(get_binary_packages vcpkg_exe)
         foreach(pkg ${to_install})
             string(REGEX REPLACE "^[^_]+_[^_]+_([^.]+)[.]zip\$" "\\1" pkg_triplet ${pkg})
 
-            message(STATUS "Downloading https://nightly.vba-m.com/vcpkg/${pkg_triplet}/${pkg} ...")
+            message(STATUS "Downloading https://nightly.visualboyadvance-m.org/vcpkg/${pkg_triplet}/${pkg} ...")
 
             file(
-                DOWNLOAD "https://nightly.vba-m.com/vcpkg/${pkg_triplet}/${pkg}" "${bin_pkgs_dir}/${pkg}"
+                DOWNLOAD "https://nightly.visualboyadvance-m.org/vcpkg/${pkg_triplet}/${pkg}" "${bin_pkgs_dir}/${pkg}"
                 STATUS pkg_download_status
             )
             list(GET pkg_download_status 1 pkg_download_error)
@@ -325,7 +315,7 @@ function(get_binary_packages vcpkg_exe)
 
 #                -command "import-module ($env:USERPROFILE + '/source/repos/vcpkg-binpkg-prototype/vcpkg-binpkg.psm1'); vcpkg-instpkg ."
         execute_process(
-            COMMAND ${powershell}
+            COMMAND ${POWERSHELL}
                 -executionpolicy bypass -noprofile
                 -command "import-module '${CMAKE_BINARY_DIR}/vcpkg-binpkg/vcpkg-binpkg.psm1'; vcpkg-instpkg ."
             WORKING_DIRECTORY ${bin_pkgs_dir}
@@ -356,6 +346,9 @@ function(vcpkg_remove_optional_deps vcpkg_exe)
 endfunction()
 
 function(vcpkg_set_toolchain)
+    if(NOT DEFINED POWERSHELL)
+        message(FATAL_ERROR "Powershell is required to use vcpkg binaries.")
+    endif()
     if(NOT DEFINED ENV{VCPKG_ROOT})
         get_filename_component(preferred_root ${CMAKE_SOURCE_DIR}/../vcpkg ABSOLUTE)
 

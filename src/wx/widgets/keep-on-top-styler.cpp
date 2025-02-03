@@ -1,9 +1,9 @@
-#include "widgets/keep-on-top-styler.h"
+#include "wx/widgets/keep-on-top-styler.h"
 
 #include <wx/toplevel.h>
 
-#include "config/option-proxy.h"
-#include "config/option.h"
+#include "core/base/check.h"
+#include "wx/config/option.h"
 
 namespace widgets {
 
@@ -13,7 +13,7 @@ KeepOnTopStyler::KeepOnTopStyler(wxTopLevelWindow* window)
                        std::bind(&KeepOnTopStyler::OnKeepOnTopChanged,
                                  this,
                                  std::placeholders::_1)) {
-    assert(window_);
+    VBAM_CHECK(window_);
     window_->Bind(wxEVT_SHOW, &KeepOnTopStyler::OnShow, this);
 }
 

@@ -1,6 +1,4 @@
-#include "wxvbam.h"
-
-#include <algorithm>
+#include "wx/wxvbam.h"
 
 #include <wx/aboutdlg.h>
 #include <wx/ffile.h>
@@ -12,29 +10,35 @@
 #include <wx/wfstream.h>
 #include <wx/msgdlg.h>
 
-#include "../common/version_cpp.h"
-#include "../gb/gbPrinter.h"
-#include "../gba/agbprint.h"
-#include "config/option-proxy.h"
-#include "config/option.h"
-#include "dialogs/game-maker.h"
-
-#define GetXRCDialog(n) \
-    wxStaticCast(wxGetApp().frame->FindWindowByName(n), wxDialog)
+#include "components/filters_interframe/interframe.h"
+#include "core/base/check.h"
+#include "core/base/version.h"
+#include "core/gb/gb.h"
+#include "core/gb/gbCheats.h"
+#include "core/gb/gbGlobals.h"
+#include "core/gb/gbPrinter.h"
+#include "core/gb/gbSound.h"
+#include "core/gba/gbaCheats.h"
+#include "core/gba/gbaEeprom.h"
+#include "core/gba/gbaGlobals.h"
+#include "core/gba/gbaPrint.h"
+#include "core/gba/gbaSound.h"
+#include "wx/config/cmdtab.h"
+#include "wx/config/option-proxy.h"
+#include "wx/config/option.h"
+#include "wx/dialogs/game-maker.h"
 
 #ifdef RETROACHIEVEMENTS
 #include "retroachievements.h"
 #include "RA_BuildVer.h"
 #endif
 
-bool cmditem_lt(const struct cmditem& cmd1, const struct cmditem& cmd2)
-{
-    return wxStrcmp(cmd1.cmd, cmd2.cmd) < 0;
-}
+#define GetXRCDialog(n) \
+    wxStaticCast(wxGetApp().frame->FindWindowByName(n), wxDialog)
 
 void MainFrame::GetMenuOptionBool(const wxString& menuName, bool* field)
 {
-    assert(field);
+    VBAM_CHECK(field);
     *field = !*field;
     int id = wxXmlResource::GetXRCID(menuName);
 
@@ -50,7 +54,7 @@ void MainFrame::GetMenuOptionBool(const wxString& menuName, bool* field)
 void MainFrame::GetMenuOptionConfig(const wxString& menu_name,
                                     const config::OptionID& option_id) {
     config::Option* option = config::Option::ByID(option_id);
-    assert(option);
+    VBAM_CHECK(option);
 
     int id = wxXmlResource::GetXRCID(menu_name);
     for (size_t i = 0; i < checkable_mi.size(); i++) {
@@ -66,7 +70,7 @@ void MainFrame::GetMenuOptionConfig(const wxString& menu_name,
                 option->SetInt(is_checked);
                 break;
             default:
-                assert(false);
+                VBAM_CHECK(false);
                 return;
         }
         break;
@@ -75,7 +79,7 @@ void MainFrame::GetMenuOptionConfig(const wxString& menu_name,
 
 void MainFrame::GetMenuOptionInt(const wxString& menuName, int* field, int mask)
 {
-    assert(field);
+    VBAM_CHECK(field);
     int value = mask;
     bool is_checked = ((*field) & (mask)) != (value);
     int id = wxXmlResource::GetXRCID(menuName);
@@ -127,7 +131,7 @@ static void toggleBitVar(bool *menuValue, int *globalVar, int mask)
 EVT_HANDLER(wxID_OPEN, "Open ROM...")
 {
     static int open_ft = 0;
-    const wxString& gba_rom_dir = OPTION(kGBAROMDir);
+    const wxString gba_rom_dir = OPTION(kGBAROMDir);
 
     // FIXME: ignore if non-existent or not a dir
     wxString pats = _(
@@ -159,7 +163,7 @@ EVT_HANDLER(wxID_OPEN, "Open ROM...")
 EVT_HANDLER(OpenGB, "Open GB...")
 {
     static int open_ft = 0;
-    const wxString& gb_rom_dir = OPTION(kGBROMDir);
+    const wxString gb_rom_dir = OPTION(kGBROMDir);
 
     // FIXME: ignore if non-existent or not a dir
     wxString pats = _(
@@ -186,7 +190,7 @@ EVT_HANDLER(OpenGB, "Open GB...")
 EVT_HANDLER(OpenGBC, "Open GBC...")
 {
     static int open_ft = 0;
-    const wxString& gbc_rom_dir = OPTION(kGBGBCROMDir);
+    const wxString gbc_rom_dir = OPTION(kGBGBCROMDir);
 
     // FIXME: ignore if non-existent or not a dir
     wxString pats = _(
@@ -320,29 +324,29 @@ EVT_HANDLER_MASK(RomInformation, "ROM information...", CMDEN_GB | CMDEN_GBA)
         wxString rom_crc32;
         rom_crc32.Printf(wxT("%08X"), panel->rom_crc32);
         SetDialogLabel(dlg, wxT("Title"), panel->rom_name, 30);
-        setlabs("IntTitle", rom[0xa0], 12);
+        setlabs("IntTitle", g_rom[0xa0], 12);
         SetDialogLabel(dlg, wxT("Scene"), panel->rom_scene_rls_name, 30);
         SetDialogLabel(dlg, wxT("Release"), panel->rom_scene_rls, 4);
         SetDialogLabel(dlg, wxT("CRC32"), rom_crc32, 8);
-        setlabs("GameCode", rom[0xac], 4);
-        setlabs("MakerCode", rom[0xb0], 2);
+        setlabs("GameCode", g_rom[0xac], 4);
+        setlabs("MakerCode", g_rom[0xb0], 2);
         s = dialogs::GetGameMakerName(s.ToStdString());
         setlab("MakerName");
-        setblab("UnitCode", rom[0xb3]);
-        s.Printf(wxT("%02x"), (unsigned int)rom[0xb4]);
+        setblab("UnitCode", g_rom[0xb3]);
+        s.Printf(wxT("%02x"), (unsigned int)g_rom[0xb4]);
 
-        if (rom[0xb4] & 0x80)
+        if (g_rom[0xb4] & 0x80)
             s.append(wxT(" (DACS)"));
 
         setlab("DeviceType");
-        setblab("Version", rom[0xbc]);
+        setblab("Version", g_rom[0xbc]);
         uint8_t crc = 0x19;
 
         for (int i = 0xa0; i < 0xbd; i++)
-            crc += rom[i];
+            crc += g_rom[i];
 
         crc = -crc;
-        s.Printf(wxT("%02x (%02x)"), crc, rom[0xbd]);
+        s.Printf(wxT("%02x (%02x)"), crc, g_rom[0xbd]);
         setlab("CRC");
         dlg->Fit();
         ShowModal(dlg);
@@ -363,7 +367,7 @@ EVT_HANDLER_MASK(SetLoadingDotCodeFile, "Load e-Reader Dot Code...", CMDEN_GBA)
     static wxString loaddotcodefile_path;
     wxFileDialog dlg(this, _("Select Dot Code file"), loaddotcodefile_path, wxEmptyString,
         _(
-                         "e-Reader Dot Code (*.bin;*.raw)|"
+                         "E-Reader Dot Code (*.bin;*.raw)|"
                          "*.bin;*.raw"),
         wxFD_OPEN | wxFD_FILE_MUST_EXIST);
     int ret = ShowModal(&dlg);
@@ -385,7 +389,7 @@ EVT_HANDLER_MASK(SetSavingDotCodeFile, "Save e-Reader Dot Code...", CMDEN_GBA)
     static wxString savedotcodefile_path;
     wxFileDialog dlg(this, _("Select Dot Code file"), savedotcodefile_path, wxEmptyString,
         _(
-                         "e-Reader Dot Code (*.bin;*.raw)|"
+                         "E-Reader Dot Code (*.bin;*.raw)|"
                          "*.bin;*.raw"),
         wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
     int ret = ShowModal(&dlg);
@@ -500,12 +504,12 @@ EVT_HANDLER_MASK(ImportGamesharkCodeFile, "Import Game Shark code file...", CMDE
                     if (f.Read(&slen, sizeof(slen)) != sizeof(slen) || slen > 1024) // arbitrary upper bound
                         break;
 
-                    char buf[1024];
+                    char buf2[1024];
 
-                    if (f.Read(buf, slen) != slen)
+                    if (f.Read(buf2, slen) != slen)
                         break;
 
-                    lst->Append(wxString(buf, wxConvLibc, slen));
+                    lst->Append(wxString(buf2, wxConvLibc, slen));
                     uint32_t ncodes;
 
                     if (f.Read(&ncodes, sizeof(ncodes)) != sizeof(ncodes))
@@ -655,7 +659,7 @@ EVT_HANDLER_MASK(ExportGamesharkSnapshot, "Export GameShark snapshot...", CMDEN_
     wxTextCtrl *tit = XRCCTRL(*infodlg, "Title", wxTextCtrl),
                *dsc = XRCCTRL(*infodlg, "Description", wxTextCtrl),
                *n = XRCCTRL(*infodlg, "Notes", wxTextCtrl);
-    tit->SetValue(wxString((const char*)&rom[0xa0], wxConvLibc, 12));
+    tit->SetValue(wxString((const char*)&g_rom[0xa0], wxConvLibc, 12));
     dsc->SetValue(wxDateTime::Now().Format(wxT("%c")));
     n->SetValue(_("Exported from Visual Boy Advance-M"));
 
@@ -855,8 +859,6 @@ EVT_HANDLER_MASK(RecordAVIStopRecording, "Stop video recording", CMDEN_VREC)
     panel->StopVidRecording();
 #endif
 }
-
-static wxString mov_path;
 
 EVT_HANDLER_MASK(RecordMovieStartRecording, "Start game recording...", CMDEN_NGREC)
 {
@@ -1211,7 +1213,7 @@ EVT_HANDLER(AllowKeyboardBackgroundInput, "Allow keyboard background input (togg
     disableKeyboardBackgroundInput();
     if (OPTION(kUIAllowKeyboardBackgroundInput)) {
         if (panel && panel->panel) {
-            enableKeyboardBackgroundInput(panel->panel->GetWindow());
+            enableKeyboardBackgroundInput(panel->panel->GetWindow()->GetEventHandler());
         }
     }
 }
@@ -1445,8 +1447,6 @@ EVT_HANDLER_MASK(Rewind, "Rewind", CMDEN_REWIND)
         return;
 #endif
 
-    MainFrame* mf = wxGetApp().frame;
-    GameArea* panel = mf->GetPanel();
     int rew_st = (panel->next_rewind_state + NUM_REWINDS - 1) % NUM_REWINDS;
 
     // if within 5 seconds of last one, and > 1 state, delete last state & move back
@@ -1800,30 +1800,13 @@ EVT_HANDLER(ToggleSound, "Enable/disable all sound channels")
 
 EVT_HANDLER(IncreaseVolume, "Increase volume")
 {
-    gopts.sound_vol += 5;
+    OPTION(kSoundVolume) += 5;
 
-    if (gopts.sound_vol > 200)
-        gopts.sound_vol = 200;
-
-    update_opts();
-    soundSetVolume((float)gopts.sound_vol / 100.0);
-    wxString msg;
-    msg.Printf(_("Volume: %d %%"), gopts.sound_vol);
-    systemScreenMessage(msg);
 }
 
 EVT_HANDLER(DecreaseVolume, "Decrease volume")
 {
-    gopts.sound_vol -= 5;
-
-    if (gopts.sound_vol < 0)
-        gopts.sound_vol = 0;
-
-    update_opts();
-    soundSetVolume((float)gopts.sound_vol / 100.0);
-    wxString msg;
-    msg.Printf(_("Volume: %d %%"), gopts.sound_vol);
-    systemScreenMessage(msg);
+    OPTION(kSoundVolume) -= 5;
 }
 
 EVT_HANDLER_MASK(NextFrame, "Next Frame", CMDEN_GB | CMDEN_GBA)
@@ -1860,7 +1843,7 @@ EVT_HANDLER(Logging, "Logging...")
         return;
 #endif
 
-    wxDialog* dlg = wxGetApp().frame->logdlg;
+    wxDialog* dlg = wxGetApp().frame->logdlg.get();
     dlg->SetWindowStyle(wxCAPTION | wxRESIZE_BORDER);
     dlg->Show();
     dlg->Raise();
@@ -1926,7 +1909,7 @@ EVT_HANDLER_MASK(TileViewer, "Tile Viewer...", CMDEN_GB | CMDEN_GBA)
     TileViewer();
 }
 
-#ifndef NO_DEBUGGER
+#if defined(VBAM_ENABLE_DEBUGGER)
 extern int remotePort;
 
 int GetGDBPort(MainFrame* mf)
@@ -1947,28 +1930,28 @@ int GetGDBPort(MainFrame* mf)
 #endif
         65535, mf);
 }
-#endif
+#endif  // defined(VBAM_ENABLE_DEBUGGER)
 
 EVT_HANDLER(DebugGDBPort, "Configure port...")
 {
-#ifndef NO_DEBUGGER
+#if defined(VBAM_ENABLE_DEBUGGER)
     int port_selected = GetGDBPort(this);
 
     if (port_selected != -1) {
         gopts.gdb_port = port_selected;
         update_opts();
     }
-#endif
+#endif  // defined(VBAM_ENABLE_DEBUGGER)
 }
 
 EVT_HANDLER(DebugGDBBreakOnLoad, "Break on load")
 {
-#ifndef NO_DEBUGGER
+#if defined(VBAM_ENABLE_DEBUGGER)
     GetMenuOptionConfig("DebugGDBBreakOnLoad", config::OptionID::kPrefGDBBreakOnLoad);
-#endif
+#endif  // defined(VBAM_ENABLE_DEBUGGER)
 }
 
-#ifndef NO_DEBUGGER
+#if defined(VBAM_ENABLE_DEBUGGER)
 void MainFrame::GDBBreak()
 {
     ModalPause mp;
@@ -2047,18 +2030,18 @@ void MainFrame::GDBBreak()
         }
     }
 }
-#endif
+#endif  // defined(VBAM_ENABLE_DEBUGGER)
 
 EVT_HANDLER_MASK(DebugGDBBreak, "Break into GDB", CMDEN_NGDB_GBA | CMDEN_GDB)
 {
-#ifndef NO_DEBUGGER
+#if defined(VBAM_ENABLE_DEBUGGER)
     GDBBreak();
-#endif
+#endif  // defined(VBAM_ENABLE_DEBUGGER)
 }
 
 EVT_HANDLER_MASK(DebugGDBDisconnect, "Disconnect GDB", CMDEN_GDB)
 {
-#ifndef NO_DEBUGGER
+#if defined(VBAM_ENABLE_DEBUGGER)
     debugger = false;
     dbgMain = NULL;
     dbgSignal = NULL;
@@ -2068,7 +2051,7 @@ EVT_HANDLER_MASK(DebugGDBDisconnect, "Disconnect GDB", CMDEN_GDB)
     cmd_enable &= ~CMDEN_GDB;
     cmd_enable |= CMDEN_NGDB_GBA | CMDEN_NGDB_ANY;
     enable_menus();
-#endif
+#endif  // defined(VBAM_ENABLE_DEBUGGER)
 }
 
 // Options menu
@@ -2126,14 +2109,6 @@ EVT_HANDLER(SpeedupConfigure, "Speedup / Turbo options...")
     }
 }
 
-EVT_HANDLER(UIConfigure, "UI Settings...")
-{
-    wxDialog* dlg = GetXRCDialog("UIConfig");
-
-    if (ShowModal(dlg) == wxID_OK)
-        update_opts();
-}
-
 EVT_HANDLER(GameBoyConfigure, "Game Boy options...")
 {
     ShowModal(GetXRCDialog("GameBoyConfig"));
@@ -2180,10 +2155,10 @@ EVT_HANDLER(GameBoyAdvanceConfigure, "Game Boy Advance options...")
              *ovmir = XRCCTRL(*dlg, "OvMirroring", wxChoice);
 
     if (panel->game_type() == IMAGE_GBA) {
-        wxString s = wxString((const char*)&rom[0xac], wxConvLibc, 4);
+        wxString s = wxString((const char*)&g_rom[0xac], wxConvLibc, 4);
         XRCCTRL(*dlg, "GameCode", wxControl)
             ->SetLabel(s);
-        cmt = wxString((const char*)&rom[0xa0], wxConvLibc, 12);
+        cmt = wxString((const char*)&g_rom[0xa0], wxConvLibc, 12);
         wxFileConfig* cfg = wxGetApp().overrides;
 
         if (cfg->HasGroup(s)) {
@@ -2217,7 +2192,7 @@ EVT_HANDLER(GameBoyAdvanceConfigure, "Game Boy Advance options...")
 
     if (panel->game_type() == IMAGE_GBA) {
         agbPrintEnable(OPTION(kPrefAgbPrint));
-        wxString s = wxString((const char*)&rom[0xac], wxConvLibc, 4);
+        wxString s = wxString((const char*)&g_rom[0xac], wxConvLibc, 4);
         wxFileConfig* cfg = wxGetApp().overrides;
         bool chg;
 
@@ -2348,45 +2323,13 @@ EVT_HANDLER_MASK(ChangeIFB, "Change Interframe Blending", CMDEN_NREC_ANY)
 
 EVT_HANDLER_MASK(SoundConfigure, "Sound options...", CMDEN_NREC_ANY)
 {
-    int oqual = gopts.sound_qual, oapi = gopts.audio_api;
-    bool oupmix = gopts.upmix, ohw = gopts.dsound_hw_accel;
-    wxString odev = gopts.audio_dev;
-    wxDialog* dlg = GetXRCDialog("SoundConfig");
-
-    if (ShowModal(dlg) != wxID_OK)
+    if (ShowModal(GetXRCDialog("SoundConfig")) != wxID_OK)
         return;
 
-    switch (panel->game_type()) {
-    case IMAGE_UNKNOWN:
-        break;
-
-    case IMAGE_GB:
-        gb_effects_config.echo = (float)gopts.gb_echo / 100.0;
-        gb_effects_config.stereo = (float)gopts.gb_stereo / 100.0;
-        gbSoundSetSampleRate(!gopts.sound_qual ? 48000 : 44100 / (1 << (gopts.sound_qual - 1)));
-        break;
-
-    case IMAGE_GBA:
-        soundSetSampleRate(!gopts.sound_qual ? 48000 : 44100 / (1 << (gopts.sound_qual - 1)));
-        soundFiltering = (float)gopts.gba_sound_filter / 100.0f;
-        break;
-    }
-
-    // changing sample rate causes driver reload, so no explicit reload needed
-    if (oqual == gopts.sound_qual &&
-        // otherwise reload if API changes
-        (oapi != gopts.audio_api || odev != gopts.audio_dev ||
-            // or init-only options
-            (oapi == AUD_XAUDIO2 && oupmix != gopts.upmix) || (oapi == AUD_FAUDIO && oupmix != gopts.upmix) || (oapi == AUD_DIRECTSOUND && ohw != gopts.dsound_hw_accel))) {
-        soundShutdown();
-
-        if (!soundInit()) {
-            wxLogError(_("Could not initialize the sound driver!"));
-        }
-    }
-
-    soundSetVolume((float)gopts.sound_vol / 100.0);
-    update_opts();
+    // No point in observing these since they can only be set in this dialog.
+    gb_effects_config.echo = (float)OPTION(kSoundGBEcho) / 100.0;
+    gb_effects_config.stereo = (float)OPTION(kSoundGBStereo) / 100.0;
+    soundFiltering = (float)OPTION(kSoundGBAFiltering) / 100.0f;
 }
 
 EVT_HANDLER(EmulatorDirectories, "Directories...")
@@ -2396,44 +2339,17 @@ EVT_HANDLER(EmulatorDirectories, "Directories...")
 
 EVT_HANDLER(JoypadConfigure, "Joypad options...")
 {
-    joy.PollAllJoysticks();
-
-    auto frame = wxGetApp().frame;
-    bool joy_timer = frame->IsJoyPollTimerRunning();
-
-    if (!joy_timer) {
-         frame->StartJoyPollTimer();
-    }
-
     if (ShowModal(GetXRCDialog("JoypadConfig")) == wxID_OK) {
-        update_joypad_opts();
+        update_shortcut_opts();
     }
-
-    if (!joy_timer) {
-        frame->StopJoyPollTimer();
-    }
-
-    SetJoystick();
 }
 
 EVT_HANDLER(Customize, "Customize UI...")
 {
-    wxDialog* dlg = GetXRCDialog("AccelConfig");
-    joy.PollAllJoysticks();
-
-    auto frame = wxGetApp().frame;
-    bool joy_timer = frame->IsJoyPollTimerRunning();
-
-    if (!joy_timer) frame->StartJoyPollTimer();
-
-    if (ShowModal(dlg) == wxID_OK) {
+    if (ShowModal(GetXRCDialog("AccelConfig")) == wxID_OK) {
         update_shortcut_opts();
         ResetMenuAccelerators();
     }
-
-    if (!joy_timer) frame->StopJoyPollTimer();
-
-    SetJoystick();
 }
 
 #ifndef NO_ONLINEUPDATES
@@ -2472,7 +2388,7 @@ EVT_HANDLER(FAQ, "VBA-M support forum")
 
 EVT_HANDLER(Translate, "Translations")
 {
-    wxLaunchDefaultBrowser(wxT("http://www.transifex.com/projects/p/vba-m"));
+    wxLaunchDefaultBrowser(wxT("https://explore.transifex.com/bgk/vba-m/"));
 }
 
 // was About
@@ -2480,11 +2396,11 @@ EVT_HANDLER(wxID_ABOUT, "About...")
 {
     wxAboutDialogInfo ai;
     ai.SetName(wxT("VisualBoyAdvance-M"));
-    wxString version(vbam_version);
+    wxString version(kVbamVersion);
     ai.SetVersion(version);
     // setting website, icon, license uses custom aboutbox on win32 & macosx
     // but at least win32 standard about is nothing special
-    ai.SetWebSite(wxT("http://www.vba-m.com/"));
+    ai.SetWebSite(wxT("http://visualboyadvance-m.org/"));
     ai.SetIcon(GetIcons().GetIcon(wxSize(32, 32), wxIconBundle::FALLBACK_NEAREST_LARGER));
     ai.SetDescription(_("Nintendo Game Boy / Color / Advance emulator."));
     ai.SetCopyright(_("Copyright (C) 1999-2003 Forgotten\nCopyright (C) 2004-2006 VBA development team\nCopyright (C) 2007-2020 VBA-M development team"));
@@ -2696,6 +2612,16 @@ EVT_HANDLER(BootRomGBC, "Use the specified BIOS file for GBC")
 EVT_HANDLER(VSync, "Wait for vertical sync")
 {
     GetMenuOptionConfig("VSync", config::OptionID::kPrefVsync);
+}
+
+EVT_HANDLER(HideMenuBar, "Hide menu bar when mouse is inactive")
+{
+    GetMenuOptionConfig("HideMenuBar", config::OptionID::kUIHideMenuBar);
+}
+
+EVT_HANDLER(SuspendScreenSaver, "Suspend screensaver when game is running")
+{
+    GetMenuOptionConfig("SuspendScreenSaver", config::OptionID::kUISuspendScreenSaver);
 }
 
 #ifndef NO_LINK

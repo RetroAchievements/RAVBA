@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <resource xmlns="http://www.wxwidgets.org/wxxrc" version="2.5.3.0">
-  <object class="wxMenuBar" name="MainMenu">
+  <object class="wxMenuBar" name="MainMenu" subclass="ShortcutMenuBar">
     <object class="wxMenu">
       <label>_File</label>
       <object class="wxMenuItem" name="wxID_OPEN">
@@ -368,10 +368,6 @@
           <checkable>1</checkable>
         </object>
         <object class="separator"/>
-        <object class="wxMenuItem" name="StatusBar">
-          <label>_Status bar</label>
-          <checkable>1</checkable>
-        </object>
         <object class="wxMenuItem" name="NoStatusMsg">
           <label>_Disable on-screen display</label>
           <checkable>1</checkable>
@@ -388,11 +384,9 @@
         </object>
         <object class="wxMenuItem" name="IncreaseVolume">
           <label>_Increase volume</label>
-          <enabled>0</enabled>
         </object>
         <object class="wxMenuItem" name="DecreaseVolume">
           <label>_Decrease volume</label>
-          <enabled>0</enabled>
         </object>
         <object class="wxMenuItem" name="ToggleSound">
           <label>_Toggle sound</label>
@@ -569,8 +563,20 @@
         <object class="wxMenuItem" name="Customize">
           <label>_Key Shortcuts...</label>
         </object>
-        <object class="wxMenuItem" name="UIConfigure">
-          <label>_UI Settings...</label>
+        <object class="wxMenu" name="UIConfigure">
+          <label>UI Settings</label>
+					<object class="wxMenuItem" name="StatusBar">
+							<label>Enable _Status bar</label>
+							<checkable>1</checkable>
+					</object>
+					<object class="wxMenuItem" name="HideMenuBar">
+							<label>Hide _Menu Bar</label>
+							<checkable>1</checkable>
+					</object>
+					<object class="wxMenuItem" name="SuspendScreenSaver">
+							<label>Suspend _Screen Saver</label>
+							<checkable>1</checkable>
+					</object>
         </object>
     </object>
     <object class="wxMenu">

@@ -1,11 +1,10 @@
-#include "dialogs/directories-config.h"
+#include "wx/dialogs/directories-config.h"
 
 #include <wx/filepicker.h>
 
-#include <wx/xrc/xmlres.h>
-
-#include "dialogs/validated-child.h"
-#include "widgets/option-validator.h"
+#include "core/base/check.h"
+#include "wx/dialogs/base-dialog.h"
+#include "wx/widgets/option-validator.h"
 
 namespace dialogs {
 
@@ -16,7 +15,7 @@ class DirectoryStringValidator final : public widgets::OptionValidator {
 public:
     DirectoryStringValidator(config::OptionID option_id)
         : widgets::OptionValidator(option_id) {
-        assert(option()->is_string());
+        VBAM_CHECK(option()->is_string());
     }
     ~DirectoryStringValidator() final = default;
 
@@ -31,7 +30,7 @@ private:
     bool WriteToWindow() final {
         wxDirPickerCtrl* dir_picker =
             wxDynamicCast(GetWindow(), wxDirPickerCtrl);
-        assert(dir_picker);
+        VBAM_CHECK(dir_picker);
         dir_picker->SetPath(option()->GetString());
         return true;
     }
@@ -39,7 +38,7 @@ private:
     bool WriteToOption() final {
         const wxDirPickerCtrl* dir_picker =
             wxDynamicCast(GetWindow(), wxDirPickerCtrl);
-        assert(dir_picker);
+        VBAM_CHECK(dir_picker);
         return option()->SetString(dir_picker->GetPath());
     }
 };
@@ -54,33 +53,27 @@ void SetUpDirPicker(wxDirPickerCtrl* dir_picker,
 
 // static
 DirectoriesConfig* DirectoriesConfig::NewInstance(wxWindow* parent) {
-    assert(parent);
+    VBAM_CHECK(parent);
     return new DirectoriesConfig(parent);
 }
 
-DirectoriesConfig::DirectoriesConfig(wxWindow* parent)
-    : wxDialog(), keep_on_top_styler_(this) {
-#if !wxCHECK_VERSION(3, 1, 0)
-    // This needs to be set before loading any element on the window. This also
-    // has no effect since wx 3.1.0, where it became the default.
-    this->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
-#endif
-    wxXmlResource::Get()->LoadDialog(this, parent, "DirectoriesConfig");
-
-    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>(this, "GBARoms"),
+DirectoriesConfig::DirectoriesConfig(wxWindow* parent) : BaseDialog(parent, "DirectoriesConfig") {
+    // clang-format off
+    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>("GBARoms"),
                    config::OptionID::kGBAROMDir);
-    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>(this, "GBRoms"),
+    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>("GBRoms"),
                    config::OptionID::kGBROMDir);
-    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>(this, "GBCRoms"),
+    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>("GBCRoms"),
                    config::OptionID::kGBGBCROMDir);
-    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>(this, "BatSaves"),
+    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>("BatSaves"),
                    config::OptionID::kGenBatteryDir);
-    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>(this, "StateSaves"),
+    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>("StateSaves"),
                    config::OptionID::kGenStateDir);
-    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>(this, "Screenshots"),
+    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>("Screenshots"),
                    config::OptionID::kGenScreenshotDir);
-    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>(this, "Recordings"),
+    SetUpDirPicker(GetValidatedChild<wxDirPickerCtrl>("Recordings"),
                    config::OptionID::kGenRecordingDir);
+    // clang-format on
 
     this->Fit();
 }

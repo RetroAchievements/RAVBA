@@ -4,7 +4,69 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [2.1.9] - 2024-03-02
+## [2.1.11] - 2024-09-15 
+
+==========================
+* 3eea90af - build: set BUILD_TESTING=OFF when not git checkout [rkitover]
+* b3952d74 - build: fix ENABLE_LIRC=ON [rkitover]
+* f264e7f8 - Fix Help -> Translations URL [rkitover]
+* 61f427de - Write shortcuts in the proper section (#1335) [Steelskin]
+* d619ee2b - build: fix installing GoogleTest [rkitover]
+* 26207038 - Update WinSparkle to 0.8.1 and add ARM64 [rkitover]
+
+## [2.1.10] - 2024-09-08 
+
+==========================
+* 7f06428d - Disable dialog position save/restore on wxGTK (#1331) [Steelskin]
+* e4ef4aa6 - Propagate key events (#1323) [Steelskin]
+* e2cf6ecb - Add option to mute sound during speedup [rkitover]
+* d516683a - build: fix for wx using GTK2 [rkitover]
+* 834c7de8 - build: update macOS builder dists [rkitover]
+* fc82e062 - build: do not build SDL bin on Windows or macOS [rkitover]
+* d543784a - [UserInput] Filter key events globally [steelskin]
+* 902c6c8e - [UserInput] Only process shortcut commands once [steelskin]
+* b7765092 - [bindings] Set default shortcut for recent file 3 [steelskin]
+* cc65ef28 - doc: add system requirements to README.md [danialhorton]
+* 32627f6b - [Dialogs] Save and restore dialog positions [steelskin]
+* 41952d06 - build: update macOS linker tool to 1.5 [rkitover]
+* 0c39a5ba - build: override FindGettext to not update po files [rkitover]
+* 1b77d659 - build: update macOS build to ffmpeg 7.0 [rkitover]
+* 8d08223d - build: fix compatibility with older ffmpeg [rkitover]
+* af6028a9 - build: fix build for nix on macOS [rkitover]
+* b52edf52 - build: fix building on macOS with Homebrew [rkitover]
+* 6766b9ca - build: fix ffmpeg 7.x compat [rkitover]
+* 795f25bb - build: fix nix deps for OpenGL [rkitover]
+* 647be137 - gba: set cpsr=spsr when switching to FIQ mode [40356555+Aikku93]
+* 8abe3e79 - build: remove -lgcc from static link flags [rkitover]
+* f4835674 - [Audio] Rework audio devices enumeration [steelskin]
+* 775a571f - build: fix detecting Visual Studio default vcpkg [rkitover]
+* 64abd3e8 - [Audio] Remove manual memory allocations [steelskin]
+* 047ad277 - [Dialogs] Prevent viewers from causing a crash [steelskin]
+* 045c98d8 - build: only use -Werror=lto-type-mismatch on gcc [rkitover]
+* 3518dc6a - build: fix LTO on Linux [rkitover]
+* cc9a03ce - Add toggle: SDL GameController mode for joysticks [rkitover]
+* 8576733c - [Build] Remove lingering references to OpenAl [steelskin]
+* 05561922 - build: fix MSYS2 check [rkitover]
+* d9432ebb - build: fix build on MINGW{64,32}/UCRT64 on MSYS2 [rkitover]
+* f57cad67 - build: fix static linking on MSYS2 CLANG64 [rkitover]
+* 23e15734 - build: set wxWidgets_DIR with vcpkg [rkitover]
+* 98b51910 - [Build] Remove ENABLE_NLS, fix TRANSLATIONS_ONLY [steelskin]
+* a565cea8 - [Build] Remove the OpenGL check [steelskin]
+* f96e42fe - build: cmake refactor and improvements [Steelskin]
+* 07e49025 - Fix most remaining release warnings (#1243) [Steelskin]
+* 18b97b43 - Fix various build warnings (#1242) [Steelskin]
+* 13a16eb7 - Fix various warnings in filters and headers (#1241) [Steelskin]
+* f46da1c5 - build: remove our version of FindSDL2.cmake [rkitover]
+* 404e9a1a - build: add clang to ./installdeps for MSYS2 [rkitover]
+* 613bd403 - Make menu more reasonably organized (#1230) [wwrustc]
+* 215e3c5a - build: use find_program() to find powershell [rkitover]
+* e5aa685f - build: don't use wx utils as UNIX cmds on Windows [rkitover]
+* 9e4c8e17 - build: fix gentoo dependency namespaces [68k]
+* 5f853b99 - Update metainfo.xml to new standards [jhonny.oliveira]
+* e7d135db - Update links to new domain visualboyadvance-m.org [rkitover]
+* 60fc096f - build: add libglu-devel for solus in installdeps [rkitover]
+
+## [2.1.9] - 2024-02-03
 =======================
 * 84b0a3e3 - Remove SDL sound driver [rkitover]
 * 2ad7dd1a - Fix wav audio recording [40356555+Aikku93]
