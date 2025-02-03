@@ -234,4 +234,12 @@ void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* 
     strncpy(s_sGameBeingLoaded, filename, sizeof(s_sGameBeingLoaded));
 
     RA_OnLoadNewRom(rom, size);
+
+    if (coreOptions.cheatsEnabled && RA_HardcoreModeIsActive())
+    {
+        coreOptions.cheatsEnabled = false;
+
+        MainFrame* mf = wxGetApp().frame;
+        mf->SetMenuOption("CheatsEnable", 0);
+    }
 }
