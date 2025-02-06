@@ -1,5 +1,10 @@
 #include "wxvbam.h"
 
+#include "../core/gb/gbGlobals.h"
+#include "../core/gba/gbaGlobals.h"
+#include "../core/gba/gbaCheats.h"
+#include "../core/gba/gbaSound.h"
+
 #include "retroachievements.h"
 #include "../../RAInterface/RA_Emulators.h"
 #include "RA_BuildVer.h"
@@ -191,12 +196,12 @@ static unsigned char GBCBankedRAMReader(unsigned int nOffs) { return gbWram ? gb
 static void GBCBankedRAMWriter(unsigned int nOffs, unsigned char nVal) { if (gbWram) gbWram[nOffs + 0x2000] = nVal; }
 
 // GBA RAM reader/writer
-static unsigned char GBAByteReaderInternalRAM(unsigned int nOffs) { return internalRAM ? internalRAM[nOffs] : 0; }
-static void GBAByteWriterInternalRAM(unsigned int nOffs, unsigned char nVal) { if (internalRAM) internalRAM[nOffs] = nVal; }
+static unsigned char GBAByteReaderInternalRAM(unsigned int nOffs) { return g_internalRAM ? g_internalRAM[nOffs] : 0; }
+static void GBAByteWriterInternalRAM(unsigned int nOffs, unsigned char nVal) { if (g_internalRAM) g_internalRAM[nOffs] = nVal; }
 
 // GBA work RAM reader/writer
-static unsigned char GBAByteReaderWorkRAM(unsigned int nOffs) { return workRAM ? workRAM[nOffs] : 0; }
-static void GBAByteWriterWorkRAM(unsigned int nOffs, unsigned char nVal) { if (workRAM) workRAM[nOffs] = nVal; }
+static unsigned char GBAByteReaderWorkRAM(unsigned int nOffs) { return g_workRAM ? g_workRAM[nOffs] : 0; }
+static void GBAByteWriterWorkRAM(unsigned int nOffs, unsigned char nVal) { if (g_workRAM) g_workRAM[nOffs] = nVal; }
 
 void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* filename)
 {
@@ -229,4 +234,12 @@ void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* 
     strncpy(s_sGameBeingLoaded, filename, sizeof(s_sGameBeingLoaded));
 
     RA_OnLoadNewRom(rom, size);
+
+    if (coreOptions.cheatsEnabled && RA_HardcoreModeIsActive())
+    {
+        coreOptions.cheatsEnabled = false;
+
+        MainFrame* mf = wxGetApp().frame;
+        mf->SetMenuOption("CheatsEnable", 0);
+    }
 }

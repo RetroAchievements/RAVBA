@@ -1,4 +1,4 @@
-#include "dialogs/display-config.h"
+#include "wx/dialogs/display-config.h"
 
 #include <wx/arrstr.h>
 #include <wx/choice.h>
@@ -13,16 +13,14 @@
 
 #include <wx/xrc/xmlres.h>
 
-#include "config/option-id.h"
-#include "config/option-proxy.h"
-#include "config/option.h"
-#include "dialogs/validated-child.h"
-#include "rpi.h"
-#include "wayland.h"
-#include "widgets/option-validator.h"
-#include "widgets/render-plugin.h"
-#include "widgets/wx/wxmisc.h"
-#include "wxvbam.h"
+#include "wx/config/option-id.h"
+#include "wx/config/option-proxy.h"
+#include "wx/config/option.h"
+#include "wx/dialogs/base-dialog.h"
+#include "wx/rpi.h"
+#include "wx/widgets/option-validator.h"
+#include "wx/widgets/render-plugin.h"
+#include "wx/wxvbam.h"
 
 namespace dialogs {
 
@@ -100,7 +98,7 @@ private:
             return false;
         }
 
-        if (static_cast<size_t>(selection) > config::kNbFilters) {
+        if (static_cast<size_t>(selection) >= option()->GetEnumMax()) {
             return false;
         }
 
@@ -133,7 +131,7 @@ private:
             return false;
         }
 
-        if (static_cast<size_t>(selection) > config::kNbInterframes) {
+        if (static_cast<size_t>(selection) >= option()->GetEnumMax()) {
             return false;
         }
 
@@ -148,7 +146,7 @@ public:
     explicit RenderValidator(config::RenderMethod render_method)
         : OptionValidator(config::OptionID::kDispRenderMethod),
           render_method_(render_method) {
-        assert(render_method != config::RenderMethod::kLast);
+        VBAM_CHECK(render_method != config::RenderMethod::kLast);
     }
     ~RenderValidator() override = default;
 
@@ -191,7 +189,7 @@ private:
 
     bool WriteToWindow() override {
         wxChoice* plugin_selector = wxDynamicCast(GetWindow(), wxChoice);
-        assert(plugin_selector);
+        VBAM_CHECK(plugin_selector);
         const wxString selected_plugin = option()->GetString();
         for (size_t i = 0; i < plugin_selector->GetCount(); i++) {
             const wxString& plugin_data =
@@ -208,7 +206,7 @@ private:
 
     bool WriteToOption() override {
         wxChoice* plugin_selector = wxDynamicCast(GetWindow(), wxChoice);
-        assert(plugin_selector);
+        VBAM_CHECK(plugin_selector);
         const wxString& selected_window_plugin =
             dynamic_cast<wxStringClientData*>(
                 plugin_selector->GetClientObject(
@@ -222,12 +220,12 @@ private:
 
 // static
 DisplayConfig* DisplayConfig::NewInstance(wxWindow* parent) {
-    assert(parent);
+    VBAM_CHECK(parent);
     return new DisplayConfig(parent);
 }
 
 DisplayConfig::DisplayConfig(wxWindow* parent)
-    : wxDialog(),
+    : BaseDialog(parent, "DisplayConfig"),
       filter_observer_(config::OptionID::kDispFilter,
                        std::bind(&DisplayConfig::OnFilterChanged,
                                  this,
@@ -235,77 +233,69 @@ DisplayConfig::DisplayConfig(wxWindow* parent)
       interframe_observer_(config::OptionID::kDispIFB,
                            std::bind(&DisplayConfig::OnInterframeChanged,
                                      this,
-                                     std::placeholders::_1)),
-      keep_on_top_styler_(this) {
-#if !wxCHECK_VERSION(3, 1, 0)
-    // This needs to be set before loading any element on the window. This also
-    // has no effect since wx 3.1.0, where it became the default.
-    this->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
-#endif
-    wxXmlResource::Get()->LoadDialog(this, parent, "DisplayConfig");
-
+                                     std::placeholders::_1)) {
     // Speed
-    GetValidatedChild(this, "FrameSkip")
+    GetValidatedChild("FrameSkip")
         ->SetValidator(
-            widgets::OptionSpinCtrlValidator(config::OptionID::kPrefFrameSkip));
+            widgets::OptionIntValidator(config::OptionID::kPrefFrameSkip));
 
     // On-Screen Display
-    GetValidatedChild(this, "SpeedIndicator")
+    GetValidatedChild("SpeedIndicator")
         ->SetValidator(
             widgets::OptionChoiceValidator(config::OptionID::kPrefShowSpeed));
 
     // Zoom
-    GetValidatedChild(this, "DefaultScale")->SetValidator(ScaleValidator());
+    GetValidatedChild("DefaultScale")->SetValidator(ScaleValidator());
 
     // this was a choice, but I'd rather not have to make an off-by-one
     // validator just for this, and spinctrl is good enough.
-    GetValidatedChild(this, "MaxScale")
+    GetValidatedChild("MaxScale")
         ->SetValidator(wxGenericValidator(&gopts.max_scale));
 
     // Basic
-    GetValidatedChild(this, "OutputSimple")
+    GetValidatedChild("OutputSimple")
         ->SetValidator(RenderValidator(config::RenderMethod::kSimple));
 
 #if defined(__WXMAC__)
-    GetValidatedChild(this, "OutputQuartz2D")
+    GetValidatedChild("OutputQuartz2D")
         ->SetValidator(RenderValidator(config::RenderMethod::kQuartz2d));
 #else
-    GetValidatedChild(this, "OutputQuartz2D")->Hide();
+    GetValidatedChild("OutputQuartz2D")->Hide();
 #endif
 
 #ifdef NO_OGL
-    GetValidatedChild(this, "OutputOpenGL")->Hide();
+    GetValidatedChild("OutputOpenGL")->Hide();
 #elif defined(HAVE_WAYLAND_SUPPORT) && !defined(HAVE_WAYLAND_EGL)
     // wxGLCanvas segfaults on Wayland before wx 3.2.
     if (IsWayland()) {
-        GetValidatedChild(this, "OutputOpenGL")->Hide();
+        GetValidatedChild("OutputOpenGL")->Hide();
     } else {
-        GetValidatedChild(this, "OutputOpenGL")
+        GetValidatedChild("OutputOpenGL")
             ->SetValidator(RenderValidator(config::RenderMethod::kOpenGL));
     }
 #else
-    GetValidatedChild(this, "OutputOpenGL")
+    GetValidatedChild("OutputOpenGL")
         ->SetValidator(RenderValidator(config::RenderMethod::kOpenGL));
 #endif  // NO_OGL
 
 #if defined(__WXMSW__) && !defined(NO_D3D)
     // Enable the Direct3D option on Windows.
-    GetValidatedChild(this, "OutputDirect3D")
+    GetValidatedChild("OutputDirect3D")
         ->SetValidator(RenderValidator(config::RenderMethod::kDirect3d));
 #else
-    GetValidatedChild(this, "OutputDirect3D")->Hide();
+    GetValidatedChild("OutputDirect3D")->Hide();
 #endif
 
-    filter_selector_ = GetValidatedChild<wxChoice>(this, "Filter");
+    filter_selector_ = GetValidatedChild<wxChoice>("Filter");
     filter_selector_->SetValidator(FilterValidator());
     filter_selector_->Bind(wxEVT_CHOICE, &DisplayConfig::UpdatePlugin, this,
                            GetId());
 
     // These are filled and/or hidden at dialog load time.
-    plugin_label_ = GetValidatedChild<wxControl>(this, "PluginLab");
-    plugin_selector_ = GetValidatedChild<wxChoice>(this, "Plugin");
+    plugin_label_ = GetValidatedChild<wxControl>("PluginLab");
+    plugin_selector_ = GetValidatedChild<wxChoice>("Plugin");
 
-    interframe_selector_ = GetValidatedChild<wxChoice>(this, "IFB");
+    interframe_selector_ = GetValidatedChild<wxChoice>("IFB");
     interframe_selector_->SetValidator(InterframeValidator());
 
     Bind(wxEVT_SHOW, &DisplayConfig::OnDialogShowEvent, this, GetId());
@@ -340,7 +330,7 @@ void DisplayConfig::PopulatePluginOptions() {
     plugin_selector_->Clear();
     plugin_selector_->Append(_("None"), new wxStringClientData());
 
-    const wxString& selected_plugin = OPTION(kDispFilterPlugin);
+    const wxString selected_plugin = OPTION(kDispFilterPlugin);
     bool is_plugin_selected = false;
 
     for (const wxString& plugin : plugins) {

@@ -1,5 +1,7 @@
-#ifndef WX_VIEWSUPT_H
-#define WX_VIEWSUPT_H
+#ifndef VBAM_WX_VIEWSUPT_H_
+#define VBAM_WX_VIEWSUPT_H_
+
+#include <cstdint>
 
 #include <wx/wx.h>
 #include <wx/window.h>
@@ -14,7 +16,7 @@
 #include <wx/stattext.h>
 #include <wx/checkbox.h>
 
-#include <stdint.h> // for uint32_t
+#include "wx/widgets/user-input-event.h"
 
 // avoid exporting too much stuff
 namespace Viewers {
@@ -218,7 +220,7 @@ protected:
     int addrlen;
 
     void MouseEvent(wxMouseEvent& ev);
-    void KeyEvent(wxKeyEvent& ev);
+    void KeyEvent(widgets::UserInputEvent& ev);
     // the subwidgets
     wxPanel disp;
     wxScrollBar sb;
@@ -253,13 +255,13 @@ public:
     void SetRGB(int r, int g, int b);
     void GetRGB(int& _r, int& _g, int& _b)
     {
-        _r = r;
-        _g = g;
-        _b = b;
+        _r = r_;
+        _g = g_;
+        _b = b_;
     }
 
 protected:
-    int r, g, b;
+    int r_, g_, b_;
     wxPanel* cp;
     wxStaticText *rt, *gt, *bt;
 };
@@ -385,9 +387,9 @@ protected:
     GfxPanel* gv;
 
 private:
-    static wxString bmp_save_dir;
-    wxScrolledWindow* gvs;
-    wxCheckBox* str;
+    static wxString bmp_save_dir_;
+    wxScrolledWindow* gvs_;
+    wxCheckBox* str_;
 
     DECLARE_EVENT_TABLE()
 };
@@ -421,4 +423,4 @@ public:
 
 // standard widgets in graphical viewers
 }
-#endif /* WX_VIEWSUPT_H */
+#endif // VBAM_WX_VIEWSUPT_H_

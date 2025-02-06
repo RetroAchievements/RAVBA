@@ -1,16 +1,15 @@
 #ifndef VBAM_WX_WIDGETS_USER_INPUT_CTRL_H_
 #define VBAM_WX_WIDGETS_USER_INPUT_CTRL_H_
 
-#include <set>
+#include <unordered_set>
 
+#include <wx/longlong.h>
 #include <wx/string.h>
 #include <wx/textctrl.h>
-#include <wx/validate.h>
 #include <wx/xrc/xmlres.h>
 
-#include "config/game-control.h"
-#include "config/user-input.h"
-#include "widgets/wx/sdljoy.h"
+#include "wx/config/user-input.h"
+#include "wx/widgets/user-input-event.h"
 
 namespace widgets {
 
@@ -26,7 +25,6 @@ public:
     UserInputCtrl();
     UserInputCtrl(wxWindow* parent,
                   wxWindowID id,
-                  const wxString& value = wxEmptyString,
                   const wxPoint& pos = wxDefaultPosition,
                   const wxSize& size = wxDefaultSize,
                   long style = 0,
@@ -35,7 +33,6 @@ public:
 
     bool Create(wxWindow* parent,
                 wxWindowID id,
-                const wxString& value = wxEmptyString,
                 const wxPoint& pos = wxDefaultPosition,
                 const wxSize& size = wxDefaultSize,
                 long style = 0,
@@ -45,7 +42,7 @@ public:
     void SetMultiKey(bool multikey);
 
     // Sets this control inputs.
-    void SetInputs(const std::set<config::UserInput>& inputs);
+    void SetInputs(const std::unordered_set<config::UserInput>& inputs);
 
     // Helper method to return the single input for no multikey UserInputCtrls.
     // Asserts if `is_multikey_` is true.
@@ -53,46 +50,27 @@ public:
     config::UserInput SingleInput() const;
 
     // Returns the inputs set in this control.
-    const std::set<config::UserInput>& inputs() const { return inputs_; }
+    const std::unordered_set<config::UserInput>& inputs() const { return inputs_; }
 
     // Clears the inputs set in this control.
     void Clear() override;
 
     wxDECLARE_DYNAMIC_CLASS(UserInputCtrl);
-    wxDECLARE_EVENT_TABLE();
 
 private:
-    // Event handlers.
-    void OnJoy(wxJoyEvent& event);
-    void OnKeyDown(wxKeyEvent& event);
-    void OnKeyUp(wxKeyEvent& event);
+    // Event handler.
+    void OnUserInput(widgets::UserInputEvent& event);
 
     // Updates the text in the control to reflect the current inputs.
     void UpdateText();
 
     bool is_multikey_ = false;
-    int last_mod_ = 0;
-    int last_key_ = 0;
 
-    std::set<config::UserInput> inputs_;
-};
+    // The last time the control was focused. This is used to ignore events sent
+    // very shortly after activation.
+    wxLongLong last_focus_time_ = 0;
 
-// A validator for the UserInputCtrl. This validator is used to transfer the
-// GameControl data to and from the UserInputCtrl.
-class UserInputCtrlValidator : public wxValidator {
-public:
-    explicit UserInputCtrlValidator(const config::GameControl game_control);
-    ~UserInputCtrlValidator() override = default;
-
-    wxObject* Clone() const override;
-
-protected:
-    // wxValidator implementation.
-    bool TransferToWindow() override;
-    bool TransferFromWindow() override;
-    bool Validate(wxWindow*) override { return true; }
-
-    const config::GameControl game_control_;
+    std::unordered_set<config::UserInput> inputs_;
 };
 
 // Handler to load the resource from an XRC file as a "UserInputCtrl" object.

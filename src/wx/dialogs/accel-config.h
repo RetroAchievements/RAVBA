@@ -3,11 +3,11 @@
 
 #include <unordered_map>
 
-#include <wx/dialog.h>
 #include <wx/treectrl.h>
 
-#include "config/shortcuts.h"
-#include "widgets/keep-on-top-styler.h"
+#include "wx/config/bindings.h"
+#include "wx/config/command.h"
+#include "wx/dialogs/base-dialog.h"
 
 // Forward declarations.
 class wxControl;
@@ -23,9 +23,12 @@ class UserInputCtrl;
 namespace dialogs {
 
 // Manages the shortcuts editor dialog.
-class AccelConfig : public wxDialog {
+class AccelConfig : public BaseDialog {
 public:
-    static AccelConfig* NewInstance(wxWindow* parent, wxMenuBar* menu_bar, wxMenu* recents);
+    static AccelConfig* NewInstance(wxWindow* parent,
+                                    wxMenuBar* menu_bar,
+                                    wxMenu* recents,
+                                    const config::BindingsProvider bindings_provider);
 
     ~AccelConfig() override = default;
 
@@ -33,7 +36,10 @@ private:
     // The constructor is private so initialization has to be done via the
     // static method. This is because this class is destroyed when its
     // owner, `parent` is destroyed. This prevents accidental deletion.
-    AccelConfig(wxWindow* parent, wxMenuBar* menu_bar, wxMenu* recents);
+    AccelConfig(wxWindow* parent,
+                wxMenuBar* menu_bar,
+                wxMenu* recents,
+                const config::BindingsProvider bindings_provider);
 
     // Re-initializes the configuration.
     void OnDialogShown(wxShowEvent& ev);
@@ -70,12 +76,12 @@ private:
     wxWindow* remove_button_;
     widgets::UserInputCtrl* key_input_;
     wxControl* currently_assigned_label_;
-    std::unordered_map<int, wxTreeItemId> command_to_item_id_;
+    std::unordered_map<config::ShortcutCommand, wxTreeItemId> command_to_item_id_;
 
-    config::Shortcuts config_shortcuts_;
+    config::Bindings config_shortcuts_;
     int selected_command_ = 0;
 
-    const widgets::KeepOnTopStyler keep_on_top_styler_;
+    const config::BindingsProvider bindings_provider_;
 };
 
 }  // namespace dialogs

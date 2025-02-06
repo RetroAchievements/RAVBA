@@ -1,22 +1,9 @@
-#ifndef _CONFIGMANAGER_H
-#define _CONFIGMANAGER_H
+#ifndef VBAM_SDL_CONFIGMANAGER_H_
+#define VBAM_SDL_CONFIGMANAGER_H_
 
 #pragma once
-#include "../sdl/filters.h"
-#include <stdio.h>
 
-#ifndef __GNUC__
-#define HAVE_DECL_GETOPT 0
-#define __STDC__ 1
-#ifndef __LIBRETRO__
-#include "getopt.h"
-#endif
-#else // ! __GNUC__
-#define HAVE_DECL_GETOPT 1
-#ifndef __LIBRETRO__
-#include <getopt.h>
-#endif
-#endif // ! __GNUC__
+#include "core/base/system.h"
 
 extern const char *biosFileNameGB;
 extern const char *biosFileNameGBA;
@@ -66,4 +53,5 @@ const char *ReadPrefString(const char *pref_key);
 void LoadConfigFile(int argc, char **argv);
 void LoadConfig();
 int ReadOpts(int argc, char **argv);
-#endif
+
+#endif  // VBAM_SDL_CONFIGMANAGER_H_

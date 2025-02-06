@@ -1,7 +1,8 @@
-#ifndef WXLOGDEBUG_H_
-#define WXLOGDEBUG_H_
+#ifndef VBAM_WX_WXLOGDEBUG_H_
+#define VBAM_WX_WXLOGDEBUG_H_
 
 #include <wx/log.h>
+#include <wx/datetime.h>
 
 // make wxLogDebug work on non-debug builds of Wx, and make it use the console
 // on Windows
@@ -20,4 +21,4 @@
     } while(0)
 #endif
 
-#endif /* WXLOGDEBUG_H_ */
+#endif // VBAM_WX_WXLOGDEBUG_H_

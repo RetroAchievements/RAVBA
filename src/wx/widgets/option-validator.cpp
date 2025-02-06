@@ -1,9 +1,12 @@
-#include "widgets/option-validator.h"
+#include "wx/widgets/option-validator.h"
 
 #include <wx/checkbox.h>
 #include <wx/choice.h>
 #include <wx/radiobut.h>
+#include <wx/slider.h>
 #include <wx/spinctrl.h>
+
+#include "core/base/check.h"
 
 namespace widgets {
 
@@ -25,22 +28,19 @@ bool OptionValidator::TransferToWindow() {
 #if WX_HAS_VALIDATOR_SET_WINDOW_OVERRIDE
 void OptionValidator::SetWindow(wxWindow* window) {
     wxValidator::SetWindow(window);
-    [[maybe_unused]] const bool write_success = WriteToWindow();
-    assert(write_success);
+    OnValueChanged();
 }
 #endif
 
 void OptionValidator::OnValueChanged() {
-    [[maybe_unused]] const bool write_success = WriteToWindow();
-    assert(write_success);
+    VBAM_CHECK(WriteToWindow());
 }
 
-OptionSelectedValidator::OptionSelectedValidator(config::OptionID option_id,
-                                                 uint32_t value)
+OptionSelectedValidator::OptionSelectedValidator(config::OptionID option_id, uint32_t value)
     : OptionValidator(option_id), value_(value) {
-    assert(option()->is_unsigned());
-    assert(value_ >= option()->GetUnsignedMin());
-    assert(value_ <= option()->GetUnsignedMax());
+    VBAM_CHECK(option()->is_unsigned());
+    VBAM_CHECK(value_ >= option()->GetUnsignedMin());
+    VBAM_CHECK(value_ <= option()->GetUnsignedMax());
 }
 
 wxObject* OptionSelectedValidator::Clone() const {
@@ -64,7 +64,7 @@ bool OptionSelectedValidator::WriteToWindow() {
         return true;
     }
 
-    assert(false);
+    VBAM_NOTREACHED();
     return false;
 }
 
@@ -77,8 +77,7 @@ bool OptionSelectedValidator::WriteToOption() {
         return true;
     }
 
-    const wxRadioButton* radio_button =
-        wxDynamicCast(GetWindow(), wxRadioButton);
+    const wxRadioButton* radio_button = wxDynamicCast(GetWindow(), wxRadioButton);
     if (radio_button) {
         if (radio_button->GetValue()) {
             option()->SetUnsigned(value_);
@@ -86,39 +85,57 @@ bool OptionSelectedValidator::WriteToOption() {
         return true;
     }
 
-    assert(false);
+    VBAM_NOTREACHED();
     return false;
 }
 
-OptionSpinCtrlValidator::OptionSpinCtrlValidator(config::OptionID option_id)
-    : OptionValidator(option_id) {
-    assert(option()->is_int());
+OptionIntValidator::OptionIntValidator(config::OptionID option_id) : OptionValidator(option_id) {
+    VBAM_CHECK(option()->is_int());
 }
 
-wxObject* OptionSpinCtrlValidator::Clone() const {
-    return new OptionSpinCtrlValidator(option()->id());
+wxObject* OptionIntValidator::Clone() const {
+    return new OptionIntValidator(option()->id());
 }
 
-bool OptionSpinCtrlValidator::IsWindowValueValid() {
+bool OptionIntValidator::IsWindowValueValid() {
     return true;
 }
 
-bool OptionSpinCtrlValidator::WriteToWindow() {
+bool OptionIntValidator::WriteToWindow() {
     wxSpinCtrl* spin_ctrl = wxDynamicCast(GetWindow(), wxSpinCtrl);
-    assert(spin_ctrl);
-    spin_ctrl->SetValue(option()->GetInt());
-    return true;
+    if (spin_ctrl) {
+        spin_ctrl->SetValue(option()->GetInt());
+        return true;
+    }
+
+    wxSlider* slider = wxDynamicCast(GetWindow(), wxSlider);
+    if (slider) {
+        slider->SetValue(option()->GetInt());
+        return true;
+    }
+
+    VBAM_NOTREACHED();
+    return false;
 }
 
-bool OptionSpinCtrlValidator::WriteToOption() {
+bool OptionIntValidator::WriteToOption() {
     const wxSpinCtrl* spin_ctrl = wxDynamicCast(GetWindow(), wxSpinCtrl);
-    assert(spin_ctrl);
-    return option()->SetInt(spin_ctrl->GetValue());
+    if (spin_ctrl) {
+        return option()->SetInt(spin_ctrl->GetValue());
+    }
+
+    const wxSlider* slider = wxDynamicCast(GetWindow(), wxSlider);
+    if (slider) {
+        return option()->SetInt(slider->GetValue());
+    }
+
+    VBAM_NOTREACHED();
+    return false;
 }
 
 OptionChoiceValidator::OptionChoiceValidator(config::OptionID option_id)
     : OptionValidator(option_id) {
-    assert(option()->is_unsigned());
+    VBAM_CHECK(option()->is_unsigned());
 }
 
 wxObject* OptionChoiceValidator::Clone() const {
@@ -131,15 +148,56 @@ bool OptionChoiceValidator::IsWindowValueValid() {
 
 bool OptionChoiceValidator::WriteToWindow() {
     wxChoice* choice = wxDynamicCast(GetWindow(), wxChoice);
-    assert(choice);
-    choice->SetSelection(option()->GetUnsigned());
-    return true;
+    if (choice) {
+        choice->SetSelection(option()->GetUnsigned());
+        return true;
+    }
+
+    VBAM_NOTREACHED();
+    return false;
 }
 
 bool OptionChoiceValidator::WriteToOption() {
     const wxChoice* choice = wxDynamicCast(GetWindow(), wxChoice);
-    assert(choice);
-    return option()->SetUnsigned(choice->GetSelection());
+    if (choice) {
+        return option()->SetUnsigned(choice->GetSelection());
+    }
+
+    VBAM_NOTREACHED();
+    return false;
+}
+
+OptionBoolValidator::OptionBoolValidator(config::OptionID option_id) : OptionValidator(option_id) {
+    VBAM_CHECK(option()->is_bool());
+}
+
+wxObject* OptionBoolValidator::Clone() const {
+    return new OptionBoolValidator(option()->id());
+}
+
+bool OptionBoolValidator::IsWindowValueValid() {
+    return true;
+}
+
+bool OptionBoolValidator::WriteToWindow() {
+    wxCheckBox* checkbox = wxDynamicCast(GetWindow(), wxCheckBox);
+    if (checkbox) {
+        checkbox->SetValue(option()->GetBool());
+        return true;
+    }
+
+    VBAM_NOTREACHED();
+    return false;
+}
+
+bool OptionBoolValidator::WriteToOption() {
+    const wxCheckBox* checkbox = wxDynamicCast(GetWindow(), wxCheckBox);
+    if (checkbox) {
+        return option()->SetBool(checkbox->GetValue());
+    }
+
+    VBAM_NOTREACHED();
+    return false;
 }
 
 }  // namespace widgets

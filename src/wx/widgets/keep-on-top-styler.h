@@ -1,9 +1,9 @@
-#ifndef VBAM_WX_DIALOGS_BASE_DIALOG_H_
-#define VBAM_WX_DIALOGS_BASE_DIALOG_H_
+#ifndef VBAM_WX_WIDGETS_KEEP_ON_TOP_STYLER_H_
+#define VBAM_WX_WIDGETS_KEEP_ON_TOP_STYLER_H_
 
 #include <wx/event.h>
 
-#include "config/option-observer.h"
+#include "wx/config/option-observer.h"
 
 // Forward declarations.
 class wxTopLevelWindow;
@@ -55,4 +55,4 @@ private:
 
 }  // namespace widgets
 
-#endif  // VBAM_WX_DIALOGS_BASE_DIALOG_H_
+#endif  // VBAM_WX_WIDGETS_KEEP_ON_TOP_STYLER_H_
