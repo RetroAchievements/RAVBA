@@ -14,7 +14,7 @@ $ git submodule update --recursive
   $ git merge source
 
 ==== Open in Visual Studio ====
-* Open a new instance of Visual Studio and select File > Open > CMake. Navigate to the room CMakeLists.txt.
+* Open a new instance of Visual Studio and select File > Open > CMake. Navigate to the root CMakeLists.txt.
 * Select the "x64-static-Debug-RetroAchievements" or "x64-static-Release-RetroAchievements" project.
 * After cmake finishes processing, you can build using whatever shortcut you have (Ctrl+Shift+B by default).
 * Change the "run" project to "RAVisualBoyAdvance-M.exe" and you can start it/debug it as you would anything else.
