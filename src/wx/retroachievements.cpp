@@ -3,6 +3,7 @@
 #include "../core/gb/gbGlobals.h"
 #include "../core/gba/gbaGlobals.h"
 #include "../core/gba/gbaCheats.h"
+#include "../core/gba/gbaFlash.h"
 #include "../core/gba/gbaSound.h"
 
 #include "retroachievements.h"
@@ -206,6 +207,10 @@ static void GBAByteWriterInternalRAM(unsigned int nOffs, unsigned char nVal) { i
 static unsigned char GBAByteReaderWorkRAM(unsigned int nOffs) { return g_workRAM ? g_workRAM[nOffs] : 0; }
 static void GBAByteWriterWorkRAM(unsigned int nOffs, unsigned char nVal) { if (g_workRAM) g_workRAM[nOffs] = nVal; }
 
+// GBA cartridge RAM reader/writer
+static unsigned char GBAByteReaderCartridgeRAM(unsigned int nOffs) { return flashSaveMemory ? flashSaveMemory[nOffs] : 0; }
+static void GBAByteWriterCartridgeRAM(unsigned int nOffs, unsigned char nVal) { if (flashSaveMemory) flashSaveMemory[nOffs] = nVal; }
+
 void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* filename)
 {
     RA_SetConsoleID(nConsole);
@@ -233,6 +238,7 @@ void RA_OnLoadNewRom(ConsoleID nConsole, uint8_t* rom, size_t size, const char* 
         case GBA:
             RA_InstallMemoryBank(0, GBAByteReaderInternalRAM, GBAByteWriterInternalRAM, 0x8000);
             RA_InstallMemoryBank(1, GBAByteReaderWorkRAM, GBAByteWriterWorkRAM, 0x40000);
+            RA_InstallMemoryBank(2, GBAByteReaderCartridgeRAM, GBAByteWriterCartridgeRAM, 0x10000);
             break;
     }
 
